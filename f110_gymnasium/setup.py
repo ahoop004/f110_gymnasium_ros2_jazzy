@@ -7,7 +7,7 @@ setup(
       author_email='billyzheng.bz@gmail.com',
       url='https://f1tenth.org',
 
-      package_dir={'': 'f110_gymnasium'},
+      package_dir={'': 'gym'},
       install_requires=['gymnasium',
 		        'numpy',
                         'Pillow',
