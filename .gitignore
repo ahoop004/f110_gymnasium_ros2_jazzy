@@ -37,10 +37,3 @@ Thumbs.db
 build/
 install/
 log/
-
-# ROS message/service generation
-msg_gen/
-srv_gen/
-
-# ROS Python cache in packages
-
