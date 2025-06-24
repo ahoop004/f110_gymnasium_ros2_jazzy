@@ -1,5 +1,13 @@
 # f110_gymnasium_ros2_jazzy
-Hacky update of f110_gym and f110_gym_ros
+Hacky update of f110_gym and f110_gym_ros.
+I have combined the following 4 repositories.
+https://github.com/f1tenth/f1tenth_gym
+https://github.com/f1tenth/f1tenth_gym_ros
+https://github.com/CL2-UWaterloo/f1tenth_ws
+https://github.com/CL2-UWaterloo/Raceline-Optimization
+
+
+
 
 ## wsl2 ubuntu stuff
 Install ubuntu 24.04
