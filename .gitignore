@@ -1,0 +1,47 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual envs
+.env/
+.venv/
+env/
+venv/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# Test & coverage logs
+.coverage
+.coverage.*
+.cache/
+.htmlcov/
+.pytest_cache/
+hypothesis/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# --- ROS2 ---
+# Workspaces
+build/
+install/
+log/
+
+# ROS message/service generation
+msg_gen/
+srv_gen/
+
+# ROS Python cache in packages
+src/**/__pycache__/
+src/**/setup.py.*
