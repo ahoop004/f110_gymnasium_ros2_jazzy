@@ -22,7 +22,7 @@ in a windows powershell terminal
 wsl --install -d Ubuntu-24.04 --name <WhateverNameYouWant>
 ```
 
-## python, gymnasium and breaking system packages
+## python, pip and breaking system packages
 ```
 sudo apt-get install python3-pip
 ```
@@ -34,12 +34,19 @@ python3 -m pip config set global.break-system-packages true
 cd f110_gymnasium_ros2_jazzy/f110_gymnasium
 ```
 ```
-
+pip install -e .
 ```
 
 ## ROS2 jazzy stuff
-Follow this
+Follow this link and install the optional development tools as well.
 https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html
+
+i like to add this to .bashrc so idont have to everytime i open a new terminal
+```
+source /opt/ros/jazzy/setup.bash
+```
+
+
 
 ## test run with keyboard input
 make sure sim runs a controls work with teleop

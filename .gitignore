@@ -43,5 +43,4 @@ msg_gen/
 srv_gen/
 
 # ROS Python cache in packages
-src/**/__pycache__/
-src/**/setup.py.*
+
