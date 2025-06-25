@@ -1,7 +1,7 @@
 # f110_gymnasium_ros2_jazzy
-Hacky update of f110_gym and f110_gym_ros.
+This repository provides an updated and consolidated framework for simulating 1/10th scale F1TENTH vehicles using the Gymnasium reinforcement learning API and the ROS 2 Jazzy distribution. It merges functionality from four major projects, modernized for compatibility with Ubuntu 24.04, Python 3.12, and ROS 2 Jazzy.
 
-I have combined the following 4 repositories.
+The following repositories have been consolidated:
 
 https://github.com/f1tenth/f1tenth_gym
 
@@ -14,37 +14,43 @@ https://github.com/CL2-UWaterloo/Raceline-Optimization
 
 
 
-## wsl2 ubuntu stuff
-Install vscode on windows. it has a server that you can call from the ubuntu command line. makes editing files easier. 
-Install ubuntu 24.04
-in a windows powershell terminal
+## WSL2 + Ubuntu 24.04 Setup
+We recommend using Visual Studio Code on Windows with the Remote - WSL extension for seamless development across WSL2.
+
+To install Ubuntu 24.04 via PowerShell:
 ```
 wsl --install -d Ubuntu-24.04 --name <WhateverNameYouWant>
 ```
+Once installed, ensure your system is up to date:
+```
+sudo apt update && sudo apt upgrade
+```
 
-## python, pip and breaking system packages
+## Python 3.12, Pip, and System Package Support
+To prepare Python for working alongside ROS:
+
 ```
 sudo apt-get install python3-pip
-```
-```
 python3 -m pip config set global.break-system-packages true
 ```
-
+Then install the Gymnasium environment:
 ```
 cd f110_gymnasium_ros2_jazzy/f110_gymnasium
-```
-```
 pip install -e .
 ```
+>Note: The use of break-system-packages is necessary to install Python packages globally when ROS is installed outside of a virtual environment.
 
-## ROS2 jazzy stuff
-Follow this link and install the optional development tools as well.
+## ROS 2 Jazzy Setup
+Follow the official ROS 2 Jazzy installation instructions for Ubuntu 24.04. Ensure to install the optional development tools (ros-dev-tools).
 https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html
 
-i like to add this to .bashrc so idont have to everytime i open a new terminal
+
+To make ROS available in every terminal, append this line to your ~/.bashrc:
 ```
 source /opt/ros/jazzy/setup.bash
 ```
+Then source it for the current session:
+'source ~/.bashrc'
 
 
 
