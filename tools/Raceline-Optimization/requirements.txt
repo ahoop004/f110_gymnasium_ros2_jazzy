@@ -1,0 +1,10 @@
+numpy
+matplotlib
+
+casadi
+scipy
+scikit-learn
+scikit-image
+PyYAML
+pandas
+argparse
