@@ -72,7 +72,7 @@ Run the jazzy_bridge package.
 
 If all goes well you schould have a window pop up like this:
 
-![screenshot](rviz_screenshot.png)
+![screenshot](screenshot.svg)
 
 ## test run with keyboard input
 make sure sim runs a controls work with teleop
