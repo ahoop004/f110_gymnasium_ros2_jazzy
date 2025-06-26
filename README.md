@@ -88,6 +88,8 @@ for every new terminal opened.
 to try it out, open a new terminal and run
 ```ros2 run teleop_twist_keyboard teleop_twist_keyboard```
 
+
+
 ## extra tools for waypoints and racelines
 go over the race line optimization stuff.
 
