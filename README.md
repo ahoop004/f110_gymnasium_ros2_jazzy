@@ -48,38 +48,45 @@ https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html
 
 
 To make ROS available in every terminal, append this line to your ~/.bashrc:
-```
-source /opt/ros/jazzy/setup.bash
-```
+```source /opt/ros/jazzy/setup.bash```
+
 Then source it for the current session:
-```source ~/.bashrc
-```
+
+```source ~/.bashrc```
 
 
 move to the jazzy_bridge dir, install dependencies, and build package.
-```cd jazzy_bridge
-```
+```cd jazzy_bridge```
 
 >Note: The use of break-system-packages is necessary to install Python packages globally when using ROS2 JAZZY.
 
-```PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install -i --from-path src --rosdistro jazzy -y
-```
+```PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install -i --from-path src --rosdistro jazzy -y```
 
-
+Build the package
 ```colcon build```
 
 then source the package
-'source install/local_setup.bash'
+```source install/local_setup.bash```
 
 Run the jazzy_bridge package.
-'ros2 launch f1tenth_gym_ros gym_bridge_launch.py'
+```ros2 launch f1tenth_gym_ros gym_bridge_launch.py``
 
 If all goes well you schould have a window pop up like this:
 
 ![screenshot](screenshot.svg)
 
-## test run with keyboard input
-make sure sim runs a controls work with teleop
+At this point, you should be able to work out of what ever directory as long as you source both:
+Aplication Layer:
+```source /opt/ros/jazzy/setup.bash```
+Client Library Layer 
+```source install/local_setup.bash```
+for every new terminal opened. 
+>Note: you may need to source the Client Library layer while in the src's parent directory.
+
+
+## Keboard control  
+to try it out, open a new terminal and run
+```ros2 run teleop_twist_keyboard teleop_twist_keyboard```
 
 ## extra tools for waypoints and racelines
 go over the race line optimization stuff.
