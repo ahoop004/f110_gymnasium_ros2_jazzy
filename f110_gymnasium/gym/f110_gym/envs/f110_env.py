@@ -194,10 +194,10 @@ class F110Env(gym.Env):
         self.sim = Simulator(self.params, self.num_agents, self.seed, time_step=self.timestep, integrator=self.integrator, lidar_dist=self.lidar_dist)
         self.sim.set_map(self.map_path, self.map_ext)
         
-        meta = yaml.safe_load(open('/home/aaron/ros2_RL/f1tenth_gym/examples/example_map.yaml'))
+        meta = yaml.safe_load(open('/home/aaron/f110_gymnasium_ros2_jazzy/assets/maps/levine.yaml'))
         R = meta['resolution']
         x0, y0, _ = meta.get('origin', (0.0, 0.0, 0.0))
-        img = Image.open('/home/aaron/ros2_RL/f1tenth_gym/examples/' + meta['image'])
+        img = Image.open('/home/aaron/f110_gymnasium_ros2_jazzy/assets/maps/' + meta['image'])
         width, height = img.size
         x_min = x0
         x_max = x0 + width * R

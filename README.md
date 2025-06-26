@@ -25,7 +25,9 @@ Once installed, ensure your system is up to date:
 ```
 sudo apt update && sudo apt upgrade
 ```
+then 
 
+'git clone https://github.com/ahoop004/f110_gymnasium_ros2_jazzy.git'
 ## Python 3.12, Pip, and System Package Support
 To prepare Python for working alongside ROS:
 
@@ -35,7 +37,7 @@ python3 -m pip config set global.break-system-packages true
 ```
 Then install the Gymnasium environment:
 ```
-cd f110_gymnasium_ros2_jazzy/f110_gymnasium
+cd f110_gymnasium
 pip install -e .
 ```
 >Note: The use of break-system-packages is necessary to install Python packages globally when ROS is installed outside of a virtual environment.
@@ -51,6 +53,8 @@ source /opt/ros/jazzy/setup.bash
 ```
 Then source it for the current session:
 'source ~/.bashrc'
+
+'PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install -i --from-path src --rosdistro jazzy -y'
 
 
 
