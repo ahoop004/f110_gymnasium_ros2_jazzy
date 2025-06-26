@@ -39,7 +39,6 @@ Then install the Gymnasium environment:
 cd f110_gymnasium
 pip install -e .
 cd ..
-
 ```
 
 
@@ -53,16 +52,21 @@ To make ROS available in every terminal, append this line to your ~/.bashrc:
 source /opt/ros/jazzy/setup.bash
 ```
 Then source it for the current session:
-'source ~/.bashrc'
+```source ~/.bashrc
+```
 
 
 move to the jazzy_bridge dir, install dependencies, and build package.
-'cd jazzy_bridge'
+```cd jazzy_bridge
+```
 
 >Note: The use of break-system-packages is necessary to install Python packages globally when using ROS2 JAZZY.
-'PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install -i --from-path src --rosdistro jazzy -y'
 
-'colcon build'
+```PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install -i --from-path src --rosdistro jazzy -y
+```
+
+
+```colcon build```
 
 then source the package
 'source install/local_setup.bash'
