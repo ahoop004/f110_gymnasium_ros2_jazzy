@@ -97,15 +97,21 @@ def generate_launch_description():
     # opp gap follow node (optional)
     if has_opp:
         opp_gap_follow = Node(
-            package='gap_follow',
+            package='opp_gap',
             executable='reactive_node',
             namespace='opp_racecar',
-            name='gap_follow_opp',
-            remappings=[
-                ('/scan', '/opp_scan'),
-                ('/drive', '/opp_drive'),
-            ],
+            name='opp_gap',
+            # remappings=[
+            #     ('/scan', '/opp_scan'),
+            #     ('/drive', '/opp_drive'),
+            # ],
             parameters=[{'use_sim_time': True}]
+        )
+        rviz_node = Node(
+            package='rviz2',
+            executable='rviz2',
+            name='rviz',
+            arguments=['-d', os.path.join(get_package_share_directory('f1tenth_gym_ros'), 'launch', '2_agents.rviz')]
         )
     # finalize
     ld.add_action(rviz_node)

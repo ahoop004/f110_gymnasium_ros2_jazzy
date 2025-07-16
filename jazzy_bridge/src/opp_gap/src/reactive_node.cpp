@@ -19,8 +19,8 @@ class ReactiveFollowGap : public rclcpp::Node {
     }
 
    private:
-    std::string lidarscan_topic = "/scan";
-    std::string drive_topic = "/drive";
+    std::string lidarscan_topic = "/opp_scan";
+    std::string drive_topic = "/opp_drive";
 
     std::vector<double> processed_lidar;
 

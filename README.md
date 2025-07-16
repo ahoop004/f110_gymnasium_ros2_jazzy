@@ -69,7 +69,7 @@ then source the package
 ```source install/local_setup.bash```
 
 Run the jazzy_bridge package.
-```ros2 launch f1tenth_gym_ros gym_bridge_launch.py``
+```ros2 launch f1tenth_gym_ros gym_bridge_launch.py```
 
 If all goes well you schould have a window pop up like this:
 
@@ -90,6 +90,6 @@ to try it out, open a new terminal and run
 
 
 
-## extra tools for waypoints and racelines
-go over the race line optimization stuff.
+## extra tools 
+```ros2 run gap_follow reactive_node ```
 
