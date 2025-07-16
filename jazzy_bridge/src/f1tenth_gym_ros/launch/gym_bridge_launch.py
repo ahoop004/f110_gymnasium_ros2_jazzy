@@ -82,14 +82,41 @@ def generate_launch_description():
         parameters=[{'robot_description': Command(['xacro ', os.path.join(get_package_share_directory('f1tenth_gym_ros'), 'launch', 'opp_racecar.xacro')])}],
         remappings=[('/robot_description', 'opp_robot_description')]
     )
+    ego_gap_follow = Node(
+        package='gap_follow',
+        executable='reactive_node',
+        namespace='ego_racecar',
+        name='gap_follow_ego',
+        remappings=[
+            ('/scan', 'scan'),
+            ('/drive', 'drive'),
+        ],
+        parameters=[{'use_sim_time': True}]
+    )
 
+    # opp gap follow node (optional)
+    if has_opp:
+        opp_gap_follow = Node(
+            package='gap_follow',
+            executable='reactive_node',
+            namespace='opp_racecar',
+            name='gap_follow_opp',
+            remappings=[
+                ('/scan', '/opp_scan'),
+                ('/drive', '/opp_drive'),
+            ],
+            parameters=[{'use_sim_time': True}]
+        )
     # finalize
     ld.add_action(rviz_node)
     ld.add_action(bridge_node)
     ld.add_action(nav_lifecycle_node)
     ld.add_action(map_server_node)
     ld.add_action(ego_robot_publisher)
+    # ld.add_action(ego_gap_follow)
     if has_opp:
         ld.add_action(opp_robot_publisher)
+        # ld.add_action(opp_gap_follow)
+
 
     return ld
