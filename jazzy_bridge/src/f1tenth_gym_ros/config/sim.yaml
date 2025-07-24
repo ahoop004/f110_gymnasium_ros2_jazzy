@@ -39,6 +39,7 @@ bridge:
     
     # laserscan parameters
     scan_fov: 4.7
+    # scan_fov: 6.2
     scan_beams: 1080
 
     # map parameters
@@ -46,7 +47,7 @@ bridge:
     map_img_ext: '.png'
 
     # opponent parameters
-    num_agent: 1
+    num_agent: 2
 
     
 

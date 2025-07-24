@@ -30,14 +30,14 @@ endforeach()
 include_directories(include)
 
 # Create Cpp executable
-add_executable(reactive_node src/reactive_node.cpp)
-ament_target_dependencies(reactive_node 
+add_executable(opp_reactive_node src/opp_reactive_node.cpp)
+ament_target_dependencies(opp_reactive_node 
   rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs
 )
 
 # Install Cpp executables
 install(TARGETS
-  reactive_node
+  opp_reactive_node
   DESTINATION lib/${PROJECT_NAME})
 
 # Install Python modules
@@ -45,7 +45,7 @@ ament_python_install_package(${PROJECT_NAME})
 
 # Install Python executables
 install(PROGRAMS
-  scripts/reactive_node.py
+  scripts/opp_reactive_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

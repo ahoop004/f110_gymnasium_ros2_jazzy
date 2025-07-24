@@ -105,7 +105,7 @@ class F110Env(gym.Env):
         try:
             self.seed = kwargs['seed']
         except:
-            self.seed = 12345
+            self.seed = 42
         try:
             self.map_name = kwargs['map']
             # different default maps

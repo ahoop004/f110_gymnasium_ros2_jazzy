@@ -87,10 +87,7 @@ def generate_launch_description():
         executable='reactive_node',
         namespace='ego_racecar',
         name='gap_follow_ego',
-        remappings=[
-            ('/scan', 'scan'),
-            ('/drive', 'drive'),
-        ],
+      
         parameters=[{'use_sim_time': True}]
     )
 
@@ -98,13 +95,10 @@ def generate_launch_description():
     if has_opp:
         opp_gap_follow = Node(
             package='opp_gap',
-            executable='reactive_node',
+            executable='opp_reactive_node',
             namespace='opp_racecar',
             name='opp_gap',
-            # remappings=[
-            #     ('/scan', '/opp_scan'),
-            #     ('/drive', '/opp_drive'),
-            # ],
+           
             parameters=[{'use_sim_time': True}]
         )
         rviz_node = Node(
@@ -119,10 +113,10 @@ def generate_launch_description():
     ld.add_action(nav_lifecycle_node)
     ld.add_action(map_server_node)
     ld.add_action(ego_robot_publisher)
-    # ld.add_action(ego_gap_follow)
+    ld.add_action(ego_gap_follow)
     if has_opp:
         ld.add_action(opp_robot_publisher)
-        # ld.add_action(opp_gap_follow)
+        ld.add_action(opp_gap_follow)
 
 
     return ld

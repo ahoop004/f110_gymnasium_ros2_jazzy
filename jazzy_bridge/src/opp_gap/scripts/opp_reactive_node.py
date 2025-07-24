@@ -60,7 +60,7 @@ class ReactiveFollowGap(Node):
         # Publish Drive message
         drive_msg = AckermannDriveStamped()
         drive_msg.drive.steering_angle = angle
-        drive_msg.drive.speed = 1.0
+        drive_msg.drive.speed = 0.50
 
         self.drive_publisher.publish(drive_msg)
 

@@ -13,7 +13,7 @@ using std::placeholders::_1;
 class ReactiveFollowGap : public rclcpp::Node {
 
    public:
-    ReactiveFollowGap() : Node("reactive_node") {
+    ReactiveFollowGap() : Node("opp_reactive_node") {
         publisher_ = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic, 10);
         subscription_ = this->create_subscription<sensor_msgs::msg::LaserScan>(lidarscan_topic, 10, std::bind(&ReactiveFollowGap::lidar_callback, this, _1));
     }

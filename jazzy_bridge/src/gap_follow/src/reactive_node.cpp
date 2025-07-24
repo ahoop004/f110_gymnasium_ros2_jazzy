@@ -106,11 +106,11 @@ class ReactiveFollowGap : public rclcpp::Node {
         // RCLCPP_INFO(this->get_logger(), "Steering angle: '%f'", drive_msg.drive.steering_angle);
 
         if (std::abs(drive_msg.drive.steering_angle) < to_radians(10)) {
-            drive_msg.drive.speed = 1.5;
+            drive_msg.drive.speed = 2.5;
         } else if (std::abs(drive_msg.drive.steering_angle) < to_radians(20)) {
-            drive_msg.drive.speed = 1.0;
+            drive_msg.drive.speed = 2.0;
         } else {
-            drive_msg.drive.speed = 0.5;
+            drive_msg.drive.speed = 1.0;
         }
         publisher_->publish(drive_msg);
     }

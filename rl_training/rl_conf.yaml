@@ -1,0 +1,29 @@
+wandb:
+  project_name: "rl_f110"  
+  entity: "researchlab"
+  name: "test-1"
+  # group: "3x3-5"
+  group: "F110-tests"
+
+# Training settings
+training_settings:
+  episodes: 100  
+  savepath: "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models" 
+  loadpath: "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models"                       
+  seed: 42 
+                   
+# Agent hyperparameters
+agent_hyperparameters:
+  learning_rate: 0.0001
+  gamma: 0.999              
+  epsilon_decay: 0.9999
+  batch_size: 64
+  memory_size: 50000
+  epsilon_max: 0.5
+  epsilon_min: 0.05                   
+    
+  # Priority Experience Replay
+per_hyperparameters:
+  alpha: 0.06
+  beta: 0.04
+  priority_epsilon: .00001
