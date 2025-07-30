@@ -1,6 +1,7 @@
 import numpy as np
 import torch
-from utils.rewards import blocking_reward
+from utils.rewards import simple_pass_reward
+from utils.gap_follow import gap_follow_action
 
 class Trainer:
     def __init__(self, env, agent, gamma):
@@ -9,7 +10,7 @@ class Trainer:
         self.gamma = gamma
 
     def run_episode(self, start_poses, max_steps):
-        obs, _ = self.env.reset(options=start_poses)
+        obs, _ = self.env.reset(options=np.array(start_poses))
         ego_obs = obs['scans'][0]
         opp_obs = obs['scans'][1]
 
@@ -21,12 +22,13 @@ class Trainer:
             actions = np.array([ego_action, opp_action])
             next_obs, _, terminated, truncated, _ = self.env.step(actions)
 
-            reward = blocking_reward(
-                next_obs['poses_x'][0],
-                next_obs['poses_x'][1],
-                next_obs['collisions'][0]
-            )
-
+            ego_pose = [obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0]]
+            opp_pose = [obs['poses_x'][1], obs['poses_y'][1], obs['poses_theta'][1]]
+            ego_collision = obs['collisions'][0]
+            
+            reward = simple_pass_reward(ego_pose, opp_pose, ego_collision)
+            
+            
             rewards.append(reward)
             log_probs.append(log_prob)
 

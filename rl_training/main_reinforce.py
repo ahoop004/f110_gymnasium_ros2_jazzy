@@ -3,7 +3,7 @@ import gymnasium as gym
 from REINFORCE.agent import REINFORCEAgent
 from REINFORCE.trainer import Trainer
 
-with open('configs/reinforce_conf.yaml', 'r') as file:
+with open('/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/configs/reinforce_config.yaml', 'r') as file:
     config = yaml.safe_load(file)
 
 env = gym.make('f110_gym:f110-v0', map=config['env_settings']['map'], map_ext=config['env_settings']['map_ext'], num_agents=2)
