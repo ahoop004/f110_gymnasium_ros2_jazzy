@@ -19,7 +19,7 @@ setup(
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
-        'console_scripts': [
+        'console_scripts': ['rl_agent_node = rl_car_controller.rl_agent_node:main',
         ],
     },
 )

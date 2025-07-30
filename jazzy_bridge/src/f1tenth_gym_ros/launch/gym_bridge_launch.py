@@ -42,13 +42,14 @@ def generate_launch_description():
         package='f1tenth_gym_ros',
         executable='gym_bridge',
         name='bridge',
-        parameters=[config]
+        parameters=[config, {'use_sim_time': True}]
     )
     rviz_node = Node(
         package='rviz2',
         executable='rviz2',
         name='rviz',
-        arguments=['-d', os.path.join(get_package_share_directory('f1tenth_gym_ros'), 'launch', 'gym_bridge.rviz')]
+        arguments=['-d', os.path.join(get_package_share_directory('f1tenth_gym_ros'), 'launch', 'gym_bridge.rviz')],
+        parameters=[{'use_sim_time': True}]
     )
     map_server_node = Node(
         package='nav2_map_server',
@@ -72,14 +73,14 @@ def generate_launch_description():
         package='robot_state_publisher',
         executable='robot_state_publisher',
         name='ego_robot_state_publisher',
-        parameters=[{'robot_description': Command(['xacro ', os.path.join(get_package_share_directory('f1tenth_gym_ros'), 'launch', 'ego_racecar.xacro')])}],
+        parameters=[{'robot_description': Command(['xacro ', os.path.join(get_package_share_directory('f1tenth_gym_ros'), 'launch', 'ego_racecar.xacro')])}, {'use_sim_time': True}],
         remappings=[('/robot_description', 'ego_robot_description')]
     )
     opp_robot_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
         name='opp_robot_state_publisher',
-        parameters=[{'robot_description': Command(['xacro ', os.path.join(get_package_share_directory('f1tenth_gym_ros'), 'launch', 'opp_racecar.xacro')])}],
+        parameters=[{'robot_description': Command(['xacro ', os.path.join(get_package_share_directory('f1tenth_gym_ros'), 'launch', 'opp_racecar.xacro')])}, {'use_sim_time': True}],
         remappings=[('/robot_description', 'opp_robot_description')]
     )
     ego_gap_follow = Node(
@@ -88,6 +89,13 @@ def generate_launch_description():
         namespace='ego_racecar',
         name='gap_follow_ego',
       
+        parameters=[{'use_sim_time': True}]
+    )
+    ego_rl_controller = Node(
+        package='rl_car_controller',
+        executable='rl_agent_node',
+        namespace='ego_racecar',
+        name='rl_car_controller',
         parameters=[{'use_sim_time': True}]
     )
 
@@ -105,6 +113,7 @@ def generate_launch_description():
             package='rviz2',
             executable='rviz2',
             name='rviz',
+            parameters=[{'use_sim_time': True}],
             arguments=['-d', os.path.join(get_package_share_directory('f1tenth_gym_ros'), 'launch', '2_agents.rviz')]
         )
     # finalize
@@ -113,7 +122,7 @@ def generate_launch_description():
     ld.add_action(nav_lifecycle_node)
     ld.add_action(map_server_node)
     ld.add_action(ego_robot_publisher)
-    ld.add_action(ego_gap_follow)
+    ld.add_action(ego_rl_controller)
     if has_opp:
         ld.add_action(opp_robot_publisher)
         ld.add_action(opp_gap_follow)
