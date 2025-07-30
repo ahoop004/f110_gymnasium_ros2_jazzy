@@ -3,12 +3,16 @@ agent_hyperparameters:
   gamma: 0.99
 
 env_settings:
+  savepath: "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models" 
+  loadpath: "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models"                       
   map: '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/straight_corridor'
   map_ext: '.png'
   start_poses:
     - [2.0, 2.0, 0.0]   # Ego start pose
     - [1.0, 2.0, 0.0]   # Opponent start pose
 
+
 training_settings:
   episodes: 1000
   max_steps: 500
+  seed: 42 

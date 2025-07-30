@@ -5,34 +5,37 @@ from ackermann_msgs.msg import AckermannDriveStamped
 import torch
 import numpy as np
 
-class RLRacecarNode(Node):
-    def __init__(self):
-        super().__init__('rl_racecar_node')
-        self.model = torch.load('path/to/your_model.pth', map_location=torch.device('cpu'))
-        self.model.eval()
-        self.subscription = self.create_subscription(
-            LaserScan,
-            '/scan',  # or your car's lidar topic
-            self.lidar_callback,
-            10
-        )
-        self.publisher = self.create_publisher(AckermannDriveStamped, '/drive', 10)
+from .models.policy import GaussianPolicy  # or import your own policy class
 
-    def lidar_callback(self, msg):
-        # Preprocess lidar data as your model expects
-        obs = np.array(msg.ranges, dtype=np.float32)
-        obs_tensor = torch.from_numpy(obs).unsqueeze(0)  # shape: (1, N)
+class RLEgoController(Node):
+    def __init__(self):
+        super().__init__('rl_ego_controller')
+        self.policy = GaussianPolicy(obs_dim=1080, act_dim=2)  # adjust as needed
+        self.policy.load_state_dict(torch.load(
+            '/path/to/your/model/policy.pth', map_location='cpu'))  # Update path
+        self.policy.eval()
+        self.subscription = self.create_subscription(
+            LaserScan, '/ego/scan', self.scan_callback, 10)
+        self.publisher = self.create_publisher(
+            AckermannDriveStamped, '/ego/drive', 10)
+
+    def scan_callback(self, msg):
+        scan = np.array(msg.ranges, dtype=np.float32)
         with torch.no_grad():
-            action = self.model(obs_tensor)
-        # Assume action = [steering, speed], modify as needed
+            mean, std = self.policy(torch.from_numpy(scan).unsqueeze(0))
+            action = mean[0].numpy()  # Use deterministic action (mean)
+        steering, speed = float(action[0]), float(action[1])
         drive_msg = AckermannDriveStamped()
-        drive_msg.drive.steering_angle = float(action[0, 0])
-        drive_msg.drive.speed = float(action[0, 1])
+        drive_msg.drive.steering_angle = steering
+        drive_msg.drive.speed = speed
         self.publisher.publish(drive_msg)
 
 def main(args=None):
     rclpy.init(args=args)
-    node = RLRacecarNode()
+    node = RLEgoController()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

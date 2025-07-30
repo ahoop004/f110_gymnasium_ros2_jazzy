@@ -16,10 +16,3 @@ class GaussianPolicy(nn.Module):
         mean = self.mean(x)
         std = torch.exp(self.log_std)
         return mean, std
-
-    def save(self, path):
-        torch.save(self.state_dict(), path)
-    
-    def load(self, path, device='cpu'):
-        self.load_state_dict(torch.load(path, map_location=device))
-        self.eval()

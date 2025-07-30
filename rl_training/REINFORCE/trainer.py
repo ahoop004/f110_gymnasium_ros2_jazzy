@@ -9,6 +9,12 @@ class Trainer:
         self.agent = agent
         self.gamma = gamma
 
+    def save_model(self, path):
+        self.agent.policy.save(path)
+    
+    def load_model(self, path, device='cpu'):
+        self.agent.policy.load(path, device=device)
+
     def run_episode(self, start_poses, max_steps):
         obs, _ = self.env.reset(options=np.array(start_poses))
         ego_obs = obs['scans'][0]

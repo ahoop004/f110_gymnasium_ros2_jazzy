@@ -20,5 +20,11 @@ for episode in range(config['training_settings']['episodes']):
         config['training_settings']['max_steps']
     )
     print(f"Episode {episode}, Total Reward: {total_reward}")
+    
+    # if (episode + 1) % 50 == 0:
+        # trainer.save_model(f"/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models/policy_ep{episode+1}.pth")
+
+# Save final
+trainer.save_model("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models/policy_final.pth")
 
 env.close()
