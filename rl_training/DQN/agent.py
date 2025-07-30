@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
-from replay_buffer import PrioritizedExperienceReplayBuffer, Experience
+from .replay_buffer import PrioritizedExperienceReplayBuffer, Experience
 
 # config = Utils.load_yaml_config('/home/ahoope5/Desktop/SUMORL/SUMO-Routing-RL/src/configurations/config.yaml')
 

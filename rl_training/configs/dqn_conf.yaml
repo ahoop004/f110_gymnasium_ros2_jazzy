@@ -4,6 +4,21 @@ wandb:
   name: "test-1"
   # group: "3x3-5"
   group: "F110-tests"
+#env settings
+env_settings:
+  map: "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/straight_corridor"
+  map_ext: ".png"
+  num_agents: 2
+
+  # ego starting pose on map
+  sx: 0.0
+  sy: 0.0
+  stheta: 0.0
+  ego_start_pose:
+  # opp starting pose on map
+  sx1: 2.0
+  sy1: 0.5
+  stheta1: 0.0
 
 # Training settings
 training_settings:
@@ -11,6 +26,7 @@ training_settings:
   savepath: "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models" 
   loadpath: "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models"                       
   seed: 42 
+  max_steps: 100000
                    
 # Agent hyperparameters
 agent_hyperparameters:
