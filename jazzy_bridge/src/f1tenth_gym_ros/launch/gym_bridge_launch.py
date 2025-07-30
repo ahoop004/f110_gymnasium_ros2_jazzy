@@ -42,7 +42,7 @@ def generate_launch_description():
         package='f1tenth_gym_ros',
         executable='gym_bridge',
         name='bridge',
-        parameters=[config, {'use_sim_time': True}]
+        parameters=[config]
     )
     rviz_node = Node(
         package='rviz2',

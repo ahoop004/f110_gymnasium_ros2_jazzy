@@ -109,9 +109,9 @@ class GymBridge(Node):
             self.opp_requested_speed = 0.0
             self.opp_steer = 0.0
             self.opp_collision = False
-            self.obs, _ = self.env.reset(options=np.array([[sx, sy, stheta], [sx1, sy1, stheta1]]))
-            self.ego_scan = list(self.obs['scans'][0])
-            self.opp_scan = list(self.obs['scans'][1])
+            self.obs, self.info = self.env.reset(options=np.array([[sx, sy, stheta], [sx1, sy1, stheta1]]))
+            self.ego_scan = list(self.obs[0])
+            self.opp_scan = list(self.obs[1])
 
             opp_scan_topic = self.get_parameter('opp_scan_topic').value
             opp_odom_topic = self.opp_namespace + '/' + self.get_parameter('opp_odom_topic').value
@@ -121,8 +121,8 @@ class GymBridge(Node):
             opp_ego_odom_topic = self.opp_namespace + '/' + self.get_parameter('opp_ego_odom_topic').value
         else:
             self.has_opp = False
-            self.obs, _ = self.env.reset(options=np.array([[sx, sy, stheta]]))
-            self.ego_scan = list(self.obs['scans'][0])
+            self.obs, self.info = self.env.reset(options=np.array([[sx, sy, stheta]]))
+            self.ego_scan = list(self.obs[0])
 
         # sim physical step timer
         self.drive_timer = self.create_timer(0.01, self.drive_timer_callback)
@@ -193,10 +193,10 @@ class GymBridge(Node):
         rqw = pose_msg.pose.pose.orientation.w
         _, _, rtheta = euler.quat2euler([rqw, rqx, rqy, rqz], axes='sxyz')
         if self.has_opp:
-            opp_pose = [self.obs['poses_x'][1], self.obs['poses_y'][1], self.obs['poses_theta'][1]]
-            self.obs, _ = self.env.reset(options=np.array([[rx, ry, rtheta], opp_pose]))
+            opp_pose = [self.info['poses_x'][1], self.info['poses_y'][1], self.info['poses_theta'][1]]
+            self.obs, self.info = self.env.reset(options=np.array([[rx, ry, rtheta], opp_pose]))
         else:
-            self.obs, _ = self.env.reset(options=np.array([[rx, ry, rtheta]]))
+            self.obs, self.info = self.env.reset(options=np.array([[rx, ry, rtheta]]))
 
     def opp_reset_callback(self, pose_msg):
         if self.has_opp:
@@ -207,7 +207,7 @@ class GymBridge(Node):
             rqz = pose_msg.pose.orientation.z
             rqw = pose_msg.pose.orientation.w
             _, _, rtheta = euler.quat2euler([rqw, rqx, rqy, rqz], axes='sxyz')
-            self.obs, _  = self.env.reset(options= np.array([list(self.ego_pose), [rx, ry, rtheta]]))
+            self.obs, self.info  = self.env.reset(options= np.array([list(self.ego_pose), [rx, ry, rtheta]]))
     def teleop_callback(self, twist_msg):
         if not self.ego_drive_published:
             self.ego_drive_published = True
@@ -223,9 +223,9 @@ class GymBridge(Node):
 
     def drive_timer_callback(self):
         if self.ego_drive_published and not self.has_opp:
-            self.obs,self.reward, self.terminated, self.truncated, _ = self.env.step(np.array([[self.ego_steer, self.ego_requested_speed]]))
+            self.obs,self.reward, self.terminated, self.truncated, self.info = self.env.step(np.array([[self.ego_steer, self.ego_requested_speed]]))
         elif self.ego_drive_published and self.has_opp and self.opp_drive_published:
-            self.obs, self.reward, self.terminated, self.truncated, _ = self.env.step(np.array([[self.ego_steer, self.ego_requested_speed], [self.opp_steer, self.opp_requested_speed]]))
+            self.obs, self.reward, self.terminated, self.truncated, self.info = self.env.step(np.array([[self.ego_steer, self.ego_requested_speed], [self.opp_steer, self.opp_requested_speed]]))
         self._update_sim_state()
 
     def timer_callback(self):
@@ -262,22 +262,22 @@ class GymBridge(Node):
         self._publish_wheel_transforms(ts)
 
     def _update_sim_state(self):
-        self.ego_scan = list(self.obs['scans'][0])
+        self.ego_scan = list(self.obs[0])
         if self.has_opp:
-            self.opp_scan = list(self.obs['scans'][1])
-            self.opp_pose[0] = self.obs['poses_x'][1]
-            self.opp_pose[1] = self.obs['poses_y'][1]
-            self.opp_pose[2] = self.obs['poses_theta'][1]
-            self.opp_speed[0] = self.obs['linear_vels_x'][1]
-            self.opp_speed[1] = self.obs['linear_vels_y'][1]
-            self.opp_speed[2] = self.obs['ang_vels_z'][1]
+            self.opp_scan = list(self.obs[1])
+            self.opp_pose[0] = self.info['poses_x'][1]
+            self.opp_pose[1] = self.info['poses_y'][1]
+            self.opp_pose[2] = self.info['poses_theta'][1]
+            self.opp_speed[0] = self.info['linear_vels_x'][1]
+            self.opp_speed[1] = self.info['linear_vels_y'][1]
+            self.opp_speed[2] = self.info['ang_vels_z'][1]
 
-        self.ego_pose[0] = self.obs['poses_x'][0]
-        self.ego_pose[1] = self.obs['poses_y'][0]
-        self.ego_pose[2] = self.obs['poses_theta'][0]
-        self.ego_speed[0] = self.obs['linear_vels_x'][0]
-        self.ego_speed[1] = self.obs['linear_vels_y'][0]
-        self.ego_speed[2] = self.obs['ang_vels_z'][0]
+        self.ego_pose[0] = self.info['poses_x'][0]
+        self.ego_pose[1] = self.info['poses_y'][0]
+        self.ego_pose[2] = self.info['poses_theta'][0]
+        self.ego_speed[0] = self.info['linear_vels_x'][0]
+        self.ego_speed[1] = self.info['linear_vels_y'][0]
+        self.ego_speed[2] = self.info['ang_vels_z'][0]
 
         
 

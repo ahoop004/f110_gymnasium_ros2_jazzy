@@ -16,9 +16,9 @@ class Trainer:
         self.agent.policy.load(path, device=device)
 
     def run_episode(self, start_poses, max_steps):
-        obs, _ = self.env.reset(options=np.array(start_poses))
-        ego_obs = obs['scans'][0]
-        opp_obs = obs['scans'][1]
+        obs, info = self.env.reset(options=np.array(start_poses))
+        ego_obs = obs[0]
+        opp_obs = obs[1]
 
         log_probs, rewards = [], []
         for step in range(max_steps):
@@ -26,7 +26,7 @@ class Trainer:
             opp_action = gap_follow_action(opp_obs)
 
             actions = np.array([ego_action, opp_action])
-            next_obs, _, terminated, truncated, _ = self.env.step(actions)
+            next_obs, _, terminated, truncated, info = self.env.step(actions)
 
             ego_pose = [obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0]]
             opp_pose = [obs['poses_x'][1], obs['poses_y'][1], obs['poses_theta'][1]]
@@ -38,8 +38,8 @@ class Trainer:
             rewards.append(reward)
             log_probs.append(log_prob)
 
-            ego_obs = next_obs['scans'][0]
-            opp_obs = next_obs['scans'][1]
+            ego_obs = next_obs[0]
+            opp_obs = next_obs[1]
 
             if terminated or truncated:
                 break

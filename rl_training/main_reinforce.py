@@ -8,7 +8,7 @@ with open('/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/configs/reinforce_c
 
 env = gym.make('f110_gym:f110-v0', map=config['env_settings']['map'], map_ext=config['env_settings']['map_ext'], num_agents=2)
 
-obs_dim = env.observation_space['scans'].shape[1]
+obs_dim = env.observation_space.shape[1]
 act_dim = env.action_space.spaces[0].shape[0]
 
 agent = REINFORCEAgent(obs_dim, act_dim, config['agent_hyperparameters']['learning_rate'])

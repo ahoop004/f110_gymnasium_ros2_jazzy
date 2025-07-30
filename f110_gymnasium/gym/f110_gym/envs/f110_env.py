@@ -214,7 +214,7 @@ class F110Env(gym.Env):
         self.action_space = spaces.Tuple((single_action_space, single_action_space))
         
         
-        scan_space = spaces.Box(low=0.0, high=10.0, shape=(1080,), dtype=np.float32)
+        scan_space = spaces.Box(low=0.0, high=30.0, shape=(1080,), dtype=np.float32)
         pose_space = spaces.Box(
             low=np.array([x_min, y_min, -np.pi], dtype=np.float32),
             high=np.array([x_max, y_max, np.pi], dtype=np.float32),
@@ -228,7 +228,7 @@ class F110Env(gym.Env):
         
         spaces_dict_obs = spaces.Dict({
             'ego_idx': spaces.Discrete(self.num_agents),
-            'scans': spaces.Box(low=0.0, high=10.0, shape=(self.num_agents, 1080), dtype=np.float32),
+            'scans': spaces.Box(low=0.0, high=30.0, shape=(self.num_agents, 1080), dtype=np.float32),
             'poses_x': spaces.Box(low=x_min, high=x_max, shape=(self.num_agents,), dtype=np.float32),
             'poses_y': spaces.Box(low=y_min, high=y_max, shape=(self.num_agents,), dtype=np.float32),
             'poses_theta': spaces.Box(low=-np.pi, high=np.pi, shape=(self.num_agents,), dtype=np.float32),
@@ -243,7 +243,9 @@ class F110Env(gym.Env):
         
         
         
-        self.observation_space = spaces_dict_obs
+        # self.observation_space = spaces_dict_obs
+        self.observation_space = spaces.Box(low=0.0, high=30.0, shape=(self.num_agents, 1080), dtype=np.float32)
+
         
 
     def __del__(self):
@@ -310,6 +312,20 @@ class F110Env(gym.Env):
         self.poses_y = obs_dict['poses_y']
         self.poses_theta = obs_dict['poses_theta']
         self.collisions = obs_dict['collisions']
+        
+    def clean_obs(self,obs):
+        # Fields that should be numpy arrays of float32
+        array_fields = [
+            'scans', 'poses_x', 'poses_y', 'poses_theta',
+            'linear_vels_x', 'linear_vels_y', 'ang_vels_z'
+        ]
+        for k in array_fields:
+            v = obs.get(k)
+            if isinstance(v, list) or (isinstance(v, np.ndarray) and v.dtype != np.float32):
+                obs[k] = np.array(v, dtype=np.float32)
+        # collisions, lap_times, lap_counts are already correct!
+        # ego_idx is an int (good)
+        return obs
 
     def step(self, action):
         """
@@ -327,9 +343,10 @@ class F110Env(gym.Env):
         
         # call simulation step
         obs = self.sim.step(action)
+
         
-        obs['lap_times'] = self.lap_times
-        obs['lap_counts'] = self.lap_counts
+        obs['lap_times'] = self.lap_times.astype(np.float32)
+        obs['lap_counts'] = self.lap_counts.astype(np.float32)
 
         F110Env.current_obs = obs
 
@@ -346,15 +363,22 @@ class F110Env(gym.Env):
         reward = self.timestep
         self.current_time = self.current_time + self.timestep
         
-        # update data member
+
         self._update_state(obs)
 
         # check done
         terminated, toggle_list = self._check_done()
         truncated = False
-        info = {'checkpoint_done': toggle_list}
+        # info = {'checkpoint_done': toggle_list}
+        info = {k: v for k, v in obs.items() if k != 'scans'}
+        info['checkpoint_done'] = toggle_list
 
-        return obs, reward, terminated, truncated, info
+        # LiDAR obs: always float32 array
+        lidar_obs = np.array(obs['scans'], dtype=np.float32)
+        lidar_obs = np.clip(lidar_obs, 0.0, 30.0) 
+        return lidar_obs, reward, terminated, truncated, info
+  
+        # return obs, reward, terminated, truncated, info
 
     def reset(self, seed=None, options=None):
         """
@@ -390,17 +414,20 @@ class F110Env(gym.Env):
         # get no input observations
         action = np.zeros((self.num_agents, 2))
         obs, reward, terminated, truncated, info = self.step(action)
-
-        self.render_obs = {
-            'ego_idx': obs['ego_idx'],
-            'poses_x': obs['poses_x'],
-            'poses_y': obs['poses_y'],
-            'poses_theta': obs['poses_theta'],
-            'lap_times': obs['lap_times'],
-            'lap_counts': obs['lap_counts']
-            }
+        lidar_obs = obs
         
-        return obs, info
+
+      
+        self.render_obs = {
+            'ego_idx': info['ego_idx'],
+            'poses_x': info['poses_x'],
+            'poses_y': info['poses_y'],
+            'poses_theta': info['poses_theta'],
+            'lap_times': info['lap_times'],
+            'lap_counts': info['lap_counts']
+            }
+        lidar_obs = np.clip(lidar_obs, 0.0, 30.0) 
+        return lidar_obs, info
 
     def update_map(self, map_path, map_ext):
         """
