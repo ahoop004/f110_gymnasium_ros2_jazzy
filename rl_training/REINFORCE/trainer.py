@@ -4,10 +4,34 @@ from utils.rewards import simple_pass_reward
 from utils.gap_follow import gap_follow_action
 
 class Trainer:
-    def __init__(self, env, agent, gamma):
+    def __init__(self, env, agent, gamma, render=False):
         self.env = env
         self.agent = agent
         self.gamma = gamma
+        self.render = render
+
+        if self.render:
+            # Unwrap to raw F110Env
+            unwrapped_env = self.env
+            while hasattr(unwrapped_env, "env"):
+                unwrapped_env = unwrapped_env.env
+            unwrapped_env.add_render_callback(self.render_callback)
+        
+    def render_callback(self,env_renderer):
+    # custom extra drawing function
+
+        e = env_renderer
+
+        # update camera to follow car
+        x = e.cars[0].position[::2]
+        y = e.cars[0].position[1::2]
+        top, bottom, left, right = max(y), min(y), min(x), max(x)
+        e.score_label.x = left
+        e.score_label.y = top - 700
+        e.left = left - 800
+        e.right = right + 800
+        e.top = top + 800
+        e.bottom = bottom - 800
 
     def save_model(self, path):
         self.agent.policy.save(path)
@@ -21,16 +45,18 @@ class Trainer:
         opp_obs = obs[1]
 
         log_probs, rewards = [], []
+        self.env.render()
         for step in range(max_steps):
             ego_action, log_prob = self.agent.select_action(ego_obs)
             opp_action = gap_follow_action(opp_obs)
 
             actions = np.array([ego_action, opp_action])
-            next_obs, _, terminated, truncated, info = self.env.step(actions)
+            next_obs, info, terminated, truncated, info = self.env.step(actions)
+            
 
-            ego_pose = [obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0]]
-            opp_pose = [obs['poses_x'][1], obs['poses_y'][1], obs['poses_theta'][1]]
-            ego_collision = obs['collisions'][0]
+            ego_pose = [info['poses_x'][0], info['poses_y'][0], info['poses_theta'][0]]
+            opp_pose = [info['poses_x'][1], info['poses_y'][1], info['poses_theta'][1]]
+            ego_collision = info['collisions'][0]
             
             reward = simple_pass_reward(ego_pose, opp_pose, ego_collision)
             
@@ -43,6 +69,7 @@ class Trainer:
 
             if terminated or truncated:
                 break
+            self.env.render()
 
         returns = self.compute_returns(rewards)
         self.agent.update_policy(torch.stack(log_probs), returns)

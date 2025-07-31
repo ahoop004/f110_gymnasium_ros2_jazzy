@@ -312,11 +312,7 @@ class EnvRenderer(pyglet.window.Window):
         glEnable(GL_PROGRAM_POINT_SIZE)
         glPointSize(4) 
 
-        # print("=== on_draw() ===")
-        # print("Projection matrix:", proj)
-        # print("Map loaded:", self.map_points is not None, "size:", len(self.map_points) if self.map_points is not None else 0)
-        # print("Cars loaded:", hasattr(self, "cars"), "count:", len(self.cars) if hasattr(self, "cars") else 0)
-        # print("Batch group count:", len(self.batch.group_map))
+ 
         self.batch.draw()
         self.fps_display.draw()
       
