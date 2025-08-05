@@ -27,7 +27,7 @@ class SimplePassReward(BaseReward):
         opp_x = opp_pose[0]
         # info['collisions'] is a list with 0/1 values for each agent
         ego_collision = info['collisions'][0]
-
+        reward = 0.0
         # Collision penalty
         if ego_collision:
             return self.collision_penalty
@@ -36,6 +36,8 @@ class SimplePassReward(BaseReward):
         # Bonus for being ahead of the opponent
         if ego_x > opp_x:
             reward += self.pass_bonus
+        elif ego_x < opp_x:
+            reward += self.step_penalty
         return reward
 
 
