@@ -9,5 +9,6 @@ occ  =   0                    # occupied (black)
 arr = np.full((height, width), free, dtype=np.uint8)
 arr[:, :3]   = occ          # left wall
 arr[:, -3:]  = occ          # right wall
-
-Image.fromarray(arr).save('/home/aaron/f110_gymnasium_ros2_jazzy/assets/maps/straight_corridor.png')
+arr[-3:,:] = occ
+arr[:3,:] = occ
+Image.fromarray(arr).save('/home/aaron/f110_gymnasium_ros2_jazzy/assets/maps/test.png')

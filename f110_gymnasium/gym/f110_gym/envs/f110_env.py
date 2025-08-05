@@ -103,20 +103,20 @@ class F110Env(gym.Env):
     def __init__(self, **kwargs):        
         # kwargs extraction
         try:
+            self.conf =kwargs['conf']
+        except:
+            self.conf=None
+        try:
             self.seed = kwargs['seed']
         except:
             self.seed = 42
+       
         try:
+            self.map_dir =kwargs['map_dir']
             self.map_name = kwargs['map']
             # different default maps
-            if self.map_name == 'berlin':
-                self.map_path = os.path.dirname(os.path.abspath(__file__)) + '/maps/berlin.yaml'
-            elif self.map_name == 'skirk':
-                self.map_path = os.path.dirname(os.path.abspath(__file__)) + '/maps/skirk.yaml'
-            elif self.map_name == 'levine':
-                self.map_path = os.path.dirname(os.path.abspath(__file__)) + '/maps/levine.yaml'
-            else:
-                self.map_path = self.map_name + '.yaml'
+            
+            self.map_path =  self.map_dir + self.map_name + '.yaml'
         except:
             self.map_path = os.path.dirname(os.path.abspath(__file__)) + '/maps/vegas.yaml'
 
@@ -194,15 +194,15 @@ class F110Env(gym.Env):
         self.sim = Simulator(self.params, self.num_agents, self.seed, time_step=self.timestep, integrator=self.integrator, lidar_dist=self.lidar_dist)
         self.sim.set_map(self.map_path, self.map_ext)
         
-        meta = yaml.safe_load(open('/home/aaron/f110_gymnasium_ros2_jazzy/assets/maps/levine.yaml'))
-        R = meta['resolution']
-        x0, y0, _ = meta.get('origin', (0.0, 0.0, 0.0))
-        img = Image.open('/home/aaron/f110_gymnasium_ros2_jazzy/assets/maps/' + meta['image'])
+        meta = yaml.safe_load(open(self.map_path))
+        self.resolution = meta['resolution']
+        self.x0, self.y0, _ = meta.get('origin', (0.0, 0.0, 0.0))
+        img = Image.open(self.map_dir + meta['image'])
         width, height = img.size
-        x_min = x0
-        x_max = x0 + width * R
-        y_min = y0
-        y_max = y0 + height * R
+        self.x_min = self.x0
+        self.x_max = self.x0 + width * self.resolution
+        self.y_min = self.y0
+        self.y_max = self.y0 + height * self.resolution
 
         # stateful observations for rendering
         self.render_obs = None
@@ -214,31 +214,31 @@ class F110Env(gym.Env):
         self.action_space = spaces.Tuple((single_action_space, single_action_space))
         
         
-        scan_space = spaces.Box(low=0.0, high=30.0, shape=(1080,), dtype=np.float32)
-        pose_space = spaces.Box(
-            low=np.array([x_min, y_min, -np.pi], dtype=np.float32),
-            high=np.array([x_max, y_max, np.pi], dtype=np.float32),
-            dtype=np.float32
-        )
-        agent_obs_space = spaces.Dict({
-            'scan': scan_space,
-            'pose': pose_space,
-            'collision': spaces.Discrete(2),
-        })
+        # scan_space = spaces.Box(low=0.0, high=30.0, shape=(1080,), dtype=np.float32)
+        # pose_space = spaces.Box(
+        #     low=np.array([self.x_min, self.y_min, -np.pi], dtype=np.float32),
+        #     high=np.array([self.x_max, self.y_max, np.pi], dtype=np.float32),
+        #     dtype=np.float32
+        # )
+        # agent_obs_space = spaces.Dict({
+        #     'scan': scan_space,
+        #     'pose': pose_space,
+        #     'collision': spaces.Discrete(2),
+        # })
         
-        spaces_dict_obs = spaces.Dict({
-            'ego_idx': spaces.Discrete(self.num_agents),
-            'scans': spaces.Box(low=0.0, high=30.0, shape=(self.num_agents, 1080), dtype=np.float32),
-            'poses_x': spaces.Box(low=x_min, high=x_max, shape=(self.num_agents,), dtype=np.float32),
-            'poses_y': spaces.Box(low=y_min, high=y_max, shape=(self.num_agents,), dtype=np.float32),
-            'poses_theta': spaces.Box(low=-np.pi, high=np.pi, shape=(self.num_agents,), dtype=np.float32),
-            'linear_vels_x': spaces.Box(low=self.params['v_min'], high=self.params['v_max'], shape=(self.num_agents,), dtype=np.float32),
-            'linear_vels_y': spaces.Box(low=self.params['v_min'], high=self.params['v_max'], shape=(self.num_agents,), dtype=np.float32),
-            'ang_vels_z': spaces.Box(low=0.0, high=10.0, shape=(self.num_agents,), dtype=np.float32),
-            'collisions': spaces.MultiBinary(self.num_agents),  # 0/1 collision flags
-            'lap_times': spaces.Box(low=0.0, high=100000.0, shape=(self.num_agents,), dtype=np.float32),
-            'lap_counts': spaces.Box(low=0, high=10, shape=(self.num_agents,), dtype=np.float32),
-        })
+        # spaces_dict_obs = spaces.Dict({
+        #     'ego_idx': spaces.Discrete(self.num_agents),
+        #     'scans': spaces.Box(low=0.0, high=30.0, shape=(self.num_agents, 1080), dtype=np.float32),
+        #     'poses_x': spaces.Box(low=x_min, high=x_max, shape=(self.num_agents,), dtype=np.float32),
+        #     'poses_y': spaces.Box(low=y_min, high=y_max, shape=(self.num_agents,), dtype=np.float32),
+        #     'poses_theta': spaces.Box(low=-np.pi, high=np.pi, shape=(self.num_agents,), dtype=np.float32),
+        #     'linear_vels_x': spaces.Box(low=self.params['v_min'], high=self.params['v_max'], shape=(self.num_agents,), dtype=np.float32),
+        #     'linear_vels_y': spaces.Box(low=self.params['v_min'], high=self.params['v_max'], shape=(self.num_agents,), dtype=np.float32),
+        #     'ang_vels_z': spaces.Box(low=0.0, high=10.0, shape=(self.num_agents,), dtype=np.float32),
+        #     'collisions': spaces.MultiBinary(self.num_agents),  # 0/1 collision flags
+        #     'lap_times': spaces.Box(low=0.0, high=100000.0, shape=(self.num_agents,), dtype=np.float32),
+        #     'lap_counts': spaces.Box(low=0, high=10, shape=(self.num_agents,), dtype=np.float32),
+        # })
         
         
         
@@ -356,7 +356,8 @@ class F110Env(gym.Env):
             'poses_y': obs['poses_y'],
             'poses_theta': obs['poses_theta'],
             'lap_times': obs['lap_times'],
-            'lap_counts': obs['lap_counts']
+            'lap_counts': obs['lap_counts'],
+            'scans': obs['scans']
             }
 
         # times
@@ -424,7 +425,8 @@ class F110Env(gym.Env):
             'poses_y': info['poses_y'],
             'poses_theta': info['poses_theta'],
             'lap_times': info['lap_times'],
-            'lap_counts': info['lap_counts']
+            'lap_counts': info['lap_counts'],
+            'scans': obs
             }
         lidar_obs = np.clip(lidar_obs, 0.0, 30.0) 
         return lidar_obs, info
@@ -482,8 +484,10 @@ class F110Env(gym.Env):
         if F110Env.renderer is None:
             # first call, initialize everything
             from f110_gym.envs.rendering import EnvRenderer
-            F110Env.renderer = EnvRenderer(WINDOW_W, WINDOW_H)
-            F110Env.renderer.update_map(self.map_name, self.map_ext)
+            F110Env.renderer = EnvRenderer(WINDOW_W,
+                                           WINDOW_H,
+                                          )
+            F110Env.renderer.update_map(self.map_dir + self.map_name, self.map_ext)
             
         F110Env.renderer.update_obs(self.render_obs)
 

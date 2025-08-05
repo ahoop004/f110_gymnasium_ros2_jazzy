@@ -4,12 +4,15 @@ agent_hyperparameters:
 
 env_settings:
   savepath: "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models" 
-  loadpath: "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models"                       
-  map: '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/straight_corridor'
+  loadpath: "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models"    
+  map_dir: '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/'
+  map: 'Shanghai_map'
   map_ext: '.png'
   start_poses:
-    - [0.0, 2.0, 1.5708]   # Ego start pose
-    - [1.0, 2.5, 1.5708]   # Opponent start pose
+    # - [0.0, 2.0, 1.5708]   # Ego start pose
+    # - [1.0, 2.5, 1.5708]   # Opponent start pose
+    - [0.0, 0.0, 0]   # Ego start pose
+    - [1.0, 0.5, 0]   # Opponent start pose
 
 
 training_settings:

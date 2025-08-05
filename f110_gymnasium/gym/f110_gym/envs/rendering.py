@@ -357,14 +357,15 @@ class EnvRenderer(pyglet.window.Window):
             self.cars[j].position[:] = vertices
         self.poses = poses
 
-        # self._draw_lidar_beams(obs)
+        self._draw_lidar_endpoints(obs)
         self.score_label.text = 'Lap Time: {laptime:.2f}, Ego Lap Count: {count:.0f}'.format(laptime=obs['lap_times'][0], count=obs['lap_counts'][obs['ego_idx']])
 
     def _draw_lidar_beams(self, obs):
         # 1) grab & optionally subsample
-        full_n   = full_n = obs['scans'][obs['ego_idx']].shape[0]
-        idxs     = np.arange(0, full_n, 60)     # e.g. every 30th beam
-        dists    = obs['scans'][obs['ego_idx'], idxs]
+        full_n = obs['scans'][obs['ego_idx']].shape[0]
+        idxs     = np.arange(0, full_n, 60)   
+        scan = obs['scans'][obs['ego_idx']] # e.g. every 30th beam
+        dists    = scan[idxs]
         n        = len(dists)
 
         # 2) compute beam angles around ego heading
@@ -400,3 +401,52 @@ class EnvRenderer(pyglet.window.Window):
         else:
             self.scan_lines.position[:] = positions
             self.scan_lines.color[:]   = colors
+    
+    
+    def _draw_lidar_endpoints(self, obs):
+        """
+        Draws lidar scan endpoints as colored points:
+        - Red if they hit an obstacle (within max range)
+        - Gray if they go to max range (no collision)
+        """
+        # full_n = obs['scans'][obs['ego_idx']].shape[0]
+        # idxs = np.arange(0, full_n, 60)  # sample every 60th beam for speed; tweak as needed
+        dists = obs['scans'][obs['ego_idx']]
+        n = len(dists)
+
+        # Compute beam angles
+        theta_0 = self.poses[obs['ego_idx'], 2]
+        angles = (np.linspace(-self.lidar_fov/2, self.lidar_fov/2, n) + theta_0)
+
+        # Get vehicle position (world/pixels)
+        x0, y0 = self.poses[obs['ego_idx'], :2]
+        scale = 50.0
+        xs_pix = (x0 + dists * np.cos(angles)) * scale
+        ys_pix = (y0 + dists * np.sin(angles)) * scale
+
+        # Draw endpoints as colored points
+        if hasattr(self, 'scan_hits'):
+            self.scan_hits.delete()
+        hit_positions = []
+        hit_colors = []
+        for xi, yi, dist in zip(xs_pix, ys_pix, dists):
+            hit_positions.extend([xi, yi])
+            if dist < self.max_range * 0.99:
+                hit_colors.extend([255, 0, 0])  # red for hit
+            else:
+                hit_colors.extend([180, 180, 180])  # gray for max range
+        self.scan_hits = self.shader.vertex_list(
+            n,
+            pyglet.gl.GL_POINTS,
+            batch=self.batch,
+            group=self.shader_group,
+            position=('f', hit_positions),
+            color=('B', hit_colors)
+        )
+    def meters_to_map_px(x, y, origin_x, origin_y, resolution):
+        """
+        Convert (x, y) in world meters to (px, py) in map PNG pixels.
+        """
+        px = (x - origin_x) / resolution
+        py = (y - origin_y) / resolution
+        return px, py
