@@ -1,5 +1,5 @@
 # rl_training/utils/custom_rewards.py
-
+import math
 import numpy as np
 
 class BaseReward:
@@ -54,4 +54,47 @@ class DistanceReward(BaseReward):
         # Euclidean distance between ego and opponent
         dist = np.sqrt((ex - ox)**2 + (ey - oy)**2)
         reward = self.step_penalty + self.scaling * dist
+        return reward
+class FastLapReward(BaseReward):
+    """
+    Reward designed to minimize lap time.
+    - step_penalty: negative reward each step to discourage taking too long.
+    - lap_reward: large positive reward for completing a lap (lap_count increment).
+    - progress_scale: scales the incremental distance travelled each step to encourage speed.
+    - collision_penalty: heavy negative penalty for collisions.
+    """
+    def __init__(self, step_penalty=-0.05, lap_reward=10.0,
+                 progress_scale=1.0, collision_penalty=-10.0, spin_penalty=0.5):
+        self.step_penalty = step_penalty
+        self.lap_reward = lap_reward
+        self.progress_scale = progress_scale
+        self.collision_penalty = collision_penalty
+        self.prev_lap_count = 0
+        self.prev_position = None  # to measure progress
+        self.spin_penalty = spin_penalty
+
+    def compute(self, ego_pose, opp_pose, info):
+        ex, ey, _ = ego_pose
+        reward = self.step_penalty
+        yaw_rate = abs(info['ang_vels_z'][0])
+        reward -= self.spin_penalty * yaw_rate
+
+        # Reward distance travelled since last step (approximates speed/progress)
+        if self.prev_position is not None:
+            dx = ex - self.prev_position[0]
+            dy = ey - self.prev_position[1]
+            dist = math.hypot(dx, dy)
+            reward += self.progress_scale * dist
+        self.prev_position = (ex, ey)
+
+        # Lap completion bonus
+        current_lap = int(info['lap_counts'][0])
+        if current_lap > self.prev_lap_count:
+            reward += self.lap_reward
+            self.prev_lap_count = current_lap
+
+        # Collision penalty
+        if info['collisions'][0]:
+            reward += self.collision_penalty
+
         return reward

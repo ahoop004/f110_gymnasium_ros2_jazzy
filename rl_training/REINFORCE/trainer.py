@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from utils.rewards import SimplePassReward 
+from utils.rewards import SimplePassReward, FastLapReward
 from utils.gap_follow import gap_follow_action
 
 class Trainer:
@@ -9,7 +9,7 @@ class Trainer:
         self.agent = agent
         self.gamma = gamma
         self.render = render
-        self.reward_fn = SimplePassReward() 
+        self.reward_fn = FastLapReward()
 
         if self.render:
             # Unwrap to raw F110Env
@@ -46,9 +46,11 @@ class Trainer:
         opp_obs = obs[1]
 
         log_probs, rewards = [], []
-        # self.env.render()
+        self.env.render()
         for step in range(max_steps):
             ego_action, log_prob = self.agent.select_action(ego_obs)
+            ego_action = np.clip(ego_action,[-1.0,-1.0],[1.0,1.0])
+            
             opp_action = gap_follow_action(opp_obs)
 
             actions = np.array([ego_action, opp_action])
@@ -70,7 +72,7 @@ class Trainer:
 
             if terminated or truncated:
                 break
-            # self.env.render()
+            self.env.render()
 
         returns = self.compute_returns(rewards)
         self.agent.update_policy(torch.stack(log_probs), returns)
