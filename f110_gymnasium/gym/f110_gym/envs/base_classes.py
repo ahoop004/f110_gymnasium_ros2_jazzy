@@ -398,10 +398,12 @@ class RaceCar(object):
             raise SyntaxError(f"Invalid Integrator Specified. Provided {self.integrator.name}. Please choose RK4 or Euler")
 
         # bound yaw angle
-        if self.state[4] > 2*np.pi:
-            self.state[4] = self.state[4] - 2*np.pi
-        elif self.state[4] < 0:
-            self.state[4] = self.state[4] + 2*np.pi
+        # if self.state[4] > 2*np.pi:
+        #     self.state[4] = self.state[4] - 2*np.pi
+        # elif self.state[4] < 0:
+        #     self.state[4] = self.state[4] + 2*np.pi
+        
+        self.state[4] = (self.state[4] + np.pi) % (2 * np.pi) - np.pi
 
         # update scan
         scan_x = self.state[0] + self.lidar_dist*np.cos(self.state[4])
