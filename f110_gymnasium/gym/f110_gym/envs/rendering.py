@@ -111,8 +111,8 @@ class EnvRenderer(pyglet.window.Window):
                 y=-800,
                 anchor_x='center',
                 anchor_y='center',
-                # width=0.01,
-                # height=0.01,
+                width=0.01,
+                height=0.01,
                 color=(255, 255, 255, 255),
                 batch=self.batch)
 
