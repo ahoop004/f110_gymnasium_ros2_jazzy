@@ -32,6 +32,7 @@ from PIL import Image
 
 # base classes
 from f110_gym.envs.base_classes import Simulator, Integrator
+from f110_gym.envs.rendering import EnvRenderer
 
 # others
 import numpy as np
@@ -483,10 +484,14 @@ class F110Env(gym.Env):
         
         if F110Env.renderer is None:
             # first call, initialize everything
-            from f110_gym.envs.rendering import EnvRenderer
+            fov = 4.7
+            max_range=30.0
             F110Env.renderer = EnvRenderer(WINDOW_W,
                                            WINDOW_H,
+                                           
                                           )
+            F110Env.renderer.lidar_fov = fov       # use the same FOV as your scanner, e.g. 4.7 rad
+            F110Env.renderer.max_range = max_range
             F110Env.renderer.update_map(self.map_dir + self.map_name, self.map_ext)
             
         F110Env.renderer.update_obs(self.render_obs)
