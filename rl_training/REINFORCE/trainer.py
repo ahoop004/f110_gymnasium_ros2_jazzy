@@ -46,7 +46,7 @@ class Trainer:
         opp_obs = obs[1]
 
         log_probs, rewards = [], []
-        # self.env.render()
+        self.env.render()
         for step in range(max_steps):
             ego_action_raw, log_prob = self.agent.select_action(ego_obs)
             # ego_action = np.clip(ego_action,[-1.0,-1.0],[1.0,1.0])
@@ -79,7 +79,7 @@ class Trainer:
 
             if terminated or truncated:
                 break
-            # self.env.render()
+            self.env.render()
 
         returns = self.compute_returns(rewards)
         self.agent.update_policy(torch.stack(log_probs), returns)

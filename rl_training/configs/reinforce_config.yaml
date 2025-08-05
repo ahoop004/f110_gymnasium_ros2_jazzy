@@ -17,5 +17,5 @@ env_settings:
 
 training_settings:
   episodes: 1000
-  max_steps: 500000
+  max_steps: 50000
   seed: 42 
