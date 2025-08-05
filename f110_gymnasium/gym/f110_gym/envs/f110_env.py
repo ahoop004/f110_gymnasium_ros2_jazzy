@@ -139,8 +139,10 @@ class F110Env(gym.Env):
                            'I': 0.04712,
                            's_min': -0.4189,
                            's_max': 0.4189,
-                           'sv_min': -3.2,
-                           'sv_max': 3.2,
+                        #    'sv_min': -3.2,
+                        #    'sv_max': 3.2,
+                            'sv_min': -1.0,
+                            'sv_max': 1.0,
                            'v_switch': 7.319,
                            'a_max': 9.51,
                            'v_min':-5.0,
@@ -170,7 +172,7 @@ class F110Env(gym.Env):
             self.integrator = kwargs['integrator']
         except:
             self.integrator = Integrator.RK4
-            
+            # self.integrator = Integrator.Euler
         # default LiDAR position
         try:
             self.lidar_dist = kwargs['lidar_dist']

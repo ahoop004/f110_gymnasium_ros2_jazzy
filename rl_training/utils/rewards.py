@@ -76,8 +76,8 @@ class FastLapReward(BaseReward):
     def compute(self, ego_pose, opp_pose, info):
         ex, ey, _ = ego_pose
         reward = self.step_penalty
-        yaw_rate = abs(info['ang_vels_z'][0])
-        reward -= self.spin_penalty * yaw_rate
+        # yaw_rate = abs(info['ang_vels_z'][0])
+        # reward -= self.spin_penalty * yaw_rate
 
         # Reward distance travelled since last step (approximates speed/progress)
         if self.prev_position is not None:

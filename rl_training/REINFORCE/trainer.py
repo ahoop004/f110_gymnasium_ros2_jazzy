@@ -9,7 +9,7 @@ class Trainer:
         self.agent = agent
         self.gamma = gamma
         self.render = render
-        self.reward_fn = FastLapReward()
+        self.reward_fn = SimplePassReward()
 
         if self.render:
             # Unwrap to raw F110Env
@@ -49,7 +49,7 @@ class Trainer:
         self.env.render()
         for step in range(max_steps):
             ego_action, log_prob = self.agent.select_action(ego_obs)
-            ego_action = np.clip(ego_action,[-1.0,-1.0],[1.0,1.0])
+            # ego_action = np.clip(ego_action,[-1.0,-1.0],[1.0,1.0])
             
             opp_action = gap_follow_action(opp_obs)
 

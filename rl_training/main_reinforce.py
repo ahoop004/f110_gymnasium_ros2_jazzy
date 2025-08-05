@@ -2,12 +2,18 @@ import yaml
 import gymnasium as gym
 from REINFORCE.agent import REINFORCEAgent
 from REINFORCE.trainer import Trainer
-from utils.rewards import SimplePassReward 
+
 
 with open('/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/configs/reinforce_config.yaml', 'r') as file:
     config = yaml.safe_load(file)
 
-env = gym.make('f110_gym:f110-v0',render_mode='human_fast',map_dir=config['env_settings']['map_dir'], map=config['env_settings']['map'], map_ext=config['env_settings']['map_ext'], num_agents=2)
+env = gym.make('f110_gym:f110-v0',
+               render_mode='human_fast',
+               map_dir=config['env_settings']['map_dir'],
+               map=config['env_settings']['map'],
+               map_ext=config['env_settings']['map_ext'],
+               num_agents=2,
+               )
 
 obs_dim = env.observation_space.shape[1]
 act_dim = env.action_space.spaces[0].shape[0]
