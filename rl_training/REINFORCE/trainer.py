@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from utils.rewards import SimplePassReward, FastLapReward
+from utils.rewards import SimplePassReward, FastLapReward, CenterlineProgressReward
 from utils.gap_follow import gap_follow_action
 from f110_gym.envs.rendering import EnvRenderer as ER
 
@@ -10,7 +10,7 @@ class Trainer:
         self.agent = agent
         self.gamma = gamma
         self.render = render
-        self.reward_fn = FastLapReward()
+        self.reward_fn = CenterlineProgressReward("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/cenerlines/Shanghai_map.csv")
 
         if self.render:
             # Unwrap to raw F110Env
@@ -47,6 +47,7 @@ class Trainer:
         obs, info = self.env.reset(options=np.array(start_poses))
         ego_obs = obs[0]
         opp_obs = obs[1]
+        self.reward_fn.reset()
 
         log_probs, rewards = [], []
         self.env.render()

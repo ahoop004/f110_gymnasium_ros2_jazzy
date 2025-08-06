@@ -451,7 +451,7 @@ class EnvRenderer(pyglet.window.Window):
         py = (y - origin_y) / resolution
         return px, py
     
-    def make_centerline_callback(centerline_csv_path):
+    def make_centerline_callback(centerline_csv_path, point_size = 1):
     # Read the CSV, skipping the header/comment row(s)
         df = pd.read_csv(centerline_csv_path, comment='#', header=None)
         # Only x and y columns
@@ -461,13 +461,14 @@ class EnvRenderer(pyglet.window.Window):
         waypoints_scaled = waypoints * scale
 
         def callback(env_renderer):
+            glPointSize(point_size)
             if not hasattr(env_renderer, '_centerline_vlist'):
                 n_points = waypoints_scaled.shape[0]
                 positions = waypoints_scaled.flatten().tolist()
                 color = [0, 255, 0]  
 
                 env_renderer._centerline_vlist = env_renderer.shader.vertex_list(
-                    n_points, pyglet.gl.GL_LINE_STRIP, batch=env_renderer.batch,
+                    n_points, pyglet.gl.GL_POINTS, batch=env_renderer.batch,
                     group=env_renderer.shader_group,
                     position=('f', positions),
                     color=('B', color * n_points)
