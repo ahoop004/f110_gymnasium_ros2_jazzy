@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from utils.rewards import SimplePassReward, FastLapReward, CenterlineProgressReward
+from utils.rewards import RobustProgressReward
 from utils.gap_follow import gap_follow_action
 from f110_gym.envs.rendering import EnvRenderer as ER
 
@@ -10,7 +10,7 @@ class Trainer:
         self.agent = agent
         self.gamma = gamma
         self.render = render
-        self.reward_fn = CenterlineProgressReward("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/cenerlines/Shanghai_map.csv")
+        self.reward_fn = RobustProgressReward("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/cenerlines/Shanghai_map.csv")
 
         if self.render:
             # Unwrap to raw F110Env
@@ -45,24 +45,18 @@ class Trainer:
 
     def run_episode(self, start_poses, max_steps):
         
-        no_progress_steps = 0
-        NO_PROGRESS_LIMIT = 50   # Number of steps allowed without meaningful progress
-        NO_MOVE_THRESH = 0.01    # As used in reward
-
         obs, info = self.env.reset(options=np.array(start_poses))
         ego_obs = obs[0]
         opp_obs = obs[1]
-        self.reward_fn.reset()
-
         log_probs, rewards = [], []
+        self.reward_fn.reset()
         self.env.render()
         for step in range(max_steps):
             ego_action_raw, log_prob = self.agent.select_action(ego_obs)
-            # ego_action = np.clip(ego_action,[-1.0,-1.0],[1.0,1.0])
-            bounded      = np.tanh(ego_action_raw)  # ensures each dimension is in [-1, 1]
+
+            bounded      = np.tanh(ego_action_raw) 
             low          = self.env.action_space.spaces[0].low
             high         = self.env.action_space.spaces[0].high
-            # Map from [-1, 1] to [low, high]
             ego_action   = low + 0.5 * (bounded + 1.0) * (high - low)
             
             

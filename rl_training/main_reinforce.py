@@ -1,8 +1,9 @@
+import os
 import yaml
 import gymnasium as gym
 from REINFORCE.agent import REINFORCEAgent
 from REINFORCE.trainer import Trainer
-from f110_gym.envs.base_classes import Integrator
+
 
 
 with open('/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/configs/reinforce_config.yaml', 'r') as file:
@@ -23,6 +24,13 @@ act_dim = env.action_space.spaces[0].shape[0]
 
 agent = REINFORCEAgent(obs_dim, act_dim, config['agent_hyperparameters']['learning_rate'])
 trainer = Trainer(env, agent, config['agent_hyperparameters']['gamma'],None ,True)
+
+# load_path = "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models/policy_final.pth"
+# if load_path and os.path.exists(load_path):
+#     print(f"Loading model from {load_path}")
+#     trainer.load_model(load_path)
+# else:
+#     print("No model loaded; training from scratch.")
 
 for episode in range(config['training_settings']['episodes']):
     total_reward = trainer.run_episode(

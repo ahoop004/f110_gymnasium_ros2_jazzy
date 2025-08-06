@@ -14,97 +14,29 @@ class BaseReward:
         raise NotImplementedError("compute() must be implemented in subclasses.")
 
 
-class SimplePassReward(BaseReward):
+class RobustProgressReward(BaseReward):
     """
-    Reward for staying in front of the opponent and penalizing collisions.
+    Robust reward for F1TENTH RL racing agents.
+    - Rewards forward progress along the centerline.
+    - Penalizes negative progress (going backwards).
+    - Penalizes lateral deviation from the centerline.
+    - Penalizes dawdling (no move).
+    - Strongly penalizes collisions.
+    - Gives a large bonus for lap completion.
+    - Rewards being ahead of the opponent in arc-length (overtaking).
     """
-    def __init__(self, step_penalty=-0.01, pass_bonus=1.0, collision_penalty=-10.0):
-        self.step_penalty = step_penalty
-        self.pass_bonus = pass_bonus
-        self.collision_penalty = collision_penalty
 
-    def compute(self, ego_pose, opp_pose, info):
-        ego_x = ego_pose[0]
-        opp_x = opp_pose[0]
-        # info['collisions'] is a list with 0/1 values for each agent
-        ego_collision = info['collisions'][0]
-        reward = 0.0
-        # Collision penalty
-        if ego_collision:
-            return self.collision_penalty
-
-        reward = self.step_penalty
-        # Bonus for being ahead of the opponent
-        if ego_x > opp_x:
-            reward += self.pass_bonus
-        elif ego_x < opp_x:
-            reward += self.step_penalty
-        return reward
-
-
-class DistanceReward(BaseReward):
-    """
-    Reward that encourages the ego car to maximize its distance from the opponent.
-    """
-    def __init__(self, step_penalty=-0.01, scaling=0.1):
-        self.step_penalty = step_penalty
-        self.scaling = scaling
-
-    def compute(self, ego_pose, opp_pose, info):
-        ex, ey, _ = ego_pose
-        ox, oy, _ = opp_pose
-
-        # Euclidean distance between ego and opponent
-        dist = np.sqrt((ex - ox)**2 + (ey - oy)**2)
-        reward = self.step_penalty + self.scaling * dist
-        return reward
-class FastLapReward(BaseReward):
-    """
-    Reward designed to minimize lap time.
-    - step_penalty: negative reward each step to discourage taking too long.
-    - lap_reward: large positive reward for completing a lap (lap_count increment).
-    - progress_scale: scales the incremental distance travelled each step to encourage speed.
-    - collision_penalty: heavy negative penalty for collisions.
-    """
-    def __init__(self, step_penalty=-0.05, lap_reward=10.0,
-                 progress_scale=1.0, collision_penalty=-10.0, spin_penalty=0.5):
-        self.step_penalty = step_penalty
-        self.lap_reward = lap_reward
-        self.progress_scale = progress_scale
-        self.collision_penalty = collision_penalty
-        self.prev_lap_count = 0
-        self.prev_position = None  # to measure progress
-        self.spin_penalty = spin_penalty
-
-    def compute(self, ego_pose, opp_pose, info):
-        ex, ey, _ = ego_pose
-        reward = self.step_penalty
-        # yaw_rate = abs(info['ang_vels_z'][0])
-        # reward -= self.spin_penalty * yaw_rate
-
-        # Reward distance travelled since last step (approximates speed/progress)
-        if self.prev_position is not None:
-            dx = ex - self.prev_position[0]
-            dy = ey - self.prev_position[1]
-            dist = math.hypot(dx, dy)
-            reward += self.progress_scale * dist
-        self.prev_position = (ex, ey)
-
-        # Lap completion bonus
-        current_lap = int(info['lap_counts'][0])
-        if current_lap > self.prev_lap_count:
-            reward += self.lap_reward
-            self.prev_lap_count = current_lap
-
-        # Collision penalty
-        if info['collisions'][0]:
-            reward += self.collision_penalty
-
-        return reward
-    
-class CenterlineProgressReward(BaseReward):
-    def __init__(self, centerline_csv, step_penalty=-0.05, progress_scale=1.1, lap_reward=10.0,
-                 collision_penalty=-10.0, no_move_penalty=-0.1, no_move_thresh=0.01):
+    def __init__(self,
+                 centerline_csv,
+                 step_penalty=-0.05,
+                 progress_scale=2.5,
+                 lap_reward=10.0,
+                 collision_penalty=-10.0,
+                 no_move_penalty=-0.02,
+                 no_move_thresh=0.01,
+                 lateral_penalty=2.0,
+                 overtaking_bonus=1.0,
+                 no_move_limit=50):
         self.helper = CenterlineHelper(centerline_csv)
         self.step_penalty = step_penalty
         self.progress_scale = progress_scale
@@ -112,12 +44,13 @@ class CenterlineProgressReward(BaseReward):
         self.collision_penalty = collision_penalty
         self.no_move_penalty = no_move_penalty
         self.no_move_thresh = no_move_thresh
+        self.lateral_penalty = lateral_penalty
+        self.overtaking_bonus = overtaking_bonus
+        self.no_move_limit = no_move_limit
+
         self.prev_progress = None
         self.prev_lap = 0
         self.no_move_steps = 0
-        self.no_move_thresh = 0.01
-        self.no_move_limit = 50
-        
 
     def reset(self, start_pose=None):
         self.prev_progress = None
@@ -126,30 +59,58 @@ class CenterlineProgressReward(BaseReward):
 
     def compute(self, ego_pose, opp_pose, info):
         ex, ey, _ = ego_pose
-        progress, _ = self.helper.project([ex, ey])
+        ox, oy, _ = opp_pose
+        progress, ego_idx = self.helper.project([ex, ey])
+        opp_progress, _ = self.helper.project([ox, oy])
         reward = self.step_penalty
 
+        # 1. Progress reward (can be negative for backward motion)
         if self.prev_progress is not None:
             delta = progress - self.prev_progress
-            if delta < -0.5 * self.helper.total_length:
+
+            # Only allow wrap correction if agent is actually close to the start/end
+            near_start = progress < 0.1 * self.helper.total_length
+            near_end = self.prev_progress > 0.9 * self.helper.total_length
+            # Or vice versa for reverse
+            near_start_prev = self.prev_progress < 0.1 * self.helper.total_length
+            near_end_now = progress > 0.9 * self.helper.total_length
+
+            if delta < -0.5 * self.helper.total_length and near_start and near_end:
                 delta += self.helper.total_length
                 reward += self.lap_reward
-            elif delta > 0.5 * self.helper.total_length:
+            elif delta > 0.5 * self.helper.total_length and near_start_prev and near_end_now:
                 delta -= self.helper.total_length
+
+            reward += self.progress_scale * delta
+ 
 
             if abs(delta) < self.no_move_thresh:
                 reward += self.no_move_penalty
                 self.no_move_steps += 1
             else:
                 self.no_move_steps = 0
-            reward += self.progress_scale * max(0, delta)
+
+            # Lateral deviation penalty
+            lateral_dev = np.linalg.norm(self.helper.centerline[ego_idx] - np.array([ex, ey]))
+            reward -= self.lateral_penalty * lateral_dev
+
+            # Overtaking/Blocking: reward for being ahead of opponent
+            # We consider wrap-around for arc-length
+            rel_progress = progress - opp_progress
+            if rel_progress < -0.5 * self.helper.total_length:
+                rel_progress += self.helper.total_length
+            elif rel_progress > 0.5 * self.helper.total_length:
+                rel_progress -= self.helper.total_length
+            if rel_progress > 0:
+                reward += self.overtaking_bonus
 
         self.prev_progress = progress
 
+        # 2. Collision penalty
         if info['collisions'][0]:
             reward += self.collision_penalty
 
         return reward
-    
+
     def is_stuck(self):
-        return self.no_move_steps >= self.no_move_limit 
+        return self.no_move_steps >= self.no_move_limit
