@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from utils.rewards import RobustProgressReward
+from utils.rewards import RobustProgressReward, WaypointProgressReward
 from utils.gap_follow import gap_follow_action
 from f110_gym.envs.rendering import EnvRenderer as ER
 
@@ -10,7 +10,7 @@ class Trainer:
         self.agent = agent
         self.gamma = gamma
         self.render = render
-        self.reward_fn = RobustProgressReward("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/cenerlines/Shanghai_map.csv")
+        self.reward_fn = WaypointProgressReward("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/cenerlines/Shanghai_map.csv")
 
         if self.render:
             # Unwrap to raw F110Env

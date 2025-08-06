@@ -32,3 +32,40 @@ class CenterlineHelper:
             t = 0
         arc_length = self.cum_lengths[seg_idx] + t * seg_len
         return arc_length, min_idx
+
+
+class WaypointHelper:
+    def __init__(self, csv_path, num_waypoints=100):
+        df = pd.read_csv(csv_path, comment='#', header=None)
+        full_centerline = df[[0, 1]].values
+        # Calculate cumulative arc-lengths
+        diffs = np.diff(full_centerline, axis=0)
+        seg_lengths = np.linalg.norm(diffs, axis=1)
+        cum_lengths = np.insert(np.cumsum(seg_lengths), 0, 0)
+        total_length = cum_lengths[-1]
+
+        # Evenly spaced arc-lengths for waypoints
+        target_lengths = np.linspace(0, total_length, num_waypoints, endpoint=False)
+        waypoints = []
+        idx = 0
+        for tlen in target_lengths:
+            while idx < len(cum_lengths) - 1 and cum_lengths[idx+1] < tlen:
+                idx += 1
+            seg_start = full_centerline[idx]
+            seg_end = full_centerline[(idx+1)%len(full_centerline)]
+            seg_len = np.linalg.norm(seg_end - seg_start)
+            if seg_len == 0:
+                waypoints.append(seg_start)
+                continue
+            t = (tlen - cum_lengths[idx]) / seg_len
+            t = np.clip(t, 0, 1)
+            point = seg_start + t * (seg_end - seg_start)
+            waypoints.append(point)
+        self.waypoints = np.array(waypoints)
+        self.num_waypoints = num_waypoints
+        self.total_length = total_length
+
+    def nearest_waypoint(self, pos):
+        dists = np.linalg.norm(self.waypoints - pos, axis=1)
+        idx = np.argmin(dists)
+        return idx, self.waypoints[idx]

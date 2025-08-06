@@ -1,7 +1,7 @@
 # rl_training/utils/custom_rewards.py
 import math
 import numpy as np
-from .centerline_helper import CenterlineHelper
+from .centerline_helper import CenterlineHelper, WaypointHelper
 
 class BaseReward:
     """
@@ -114,3 +114,75 @@ class RobustProgressReward(BaseReward):
 
     def is_stuck(self):
         return self.no_move_steps >= self.no_move_limit
+    
+class WaypointProgressReward(BaseReward):
+    def __init__(self, centerline_csv, num_waypoints=100,
+                 step_penalty=-0.05, progress_scale=1.0, lap_reward=10.0,
+                 collision_penalty=-10.0, lateral_penalty=2.0, overtaking_bonus=1.0, no_move_penalty=-0.01, no_move_limit=150):
+
+        self.helper = WaypointHelper(centerline_csv, num_waypoints=num_waypoints)
+        self.step_penalty = step_penalty
+        self.progress_scale = progress_scale
+        self.lap_reward = lap_reward
+        self.collision_penalty = collision_penalty
+        self.lateral_penalty = lateral_penalty
+        self.overtaking_bonus = overtaking_bonus
+        self.no_move_penalty = no_move_penalty
+        self.no_move_limit = no_move_limit
+
+        self.prev_idx = None
+        self.no_move_steps = 0
+        self.laps = 0
+
+    def reset(self, start_pose=None):
+        self.prev_idx = None
+        self.no_move_steps = 0
+        self.laps = 0
+
+    def compute(self, ego_pose, opp_pose, info):
+        ex, ey, _ = ego_pose
+        ox, oy, _ = opp_pose
+        ego_idx, _ = self.helper.nearest_waypoint([ex, ey])
+        opp_idx, _ = self.helper.nearest_waypoint([ox, oy])
+        num_wp = self.helper.num_waypoints
+
+        reward = self.step_penalty
+
+        if self.prev_idx is not None:
+            # Modular progress delta
+            delta = (ego_idx - self.prev_idx) % num_wp
+            if delta > num_wp // 2:
+                delta -= num_wp  # Allow negative for moving backward
+            if ego_idx < self.prev_idx and delta > 0:
+                # Lap completed
+                reward += self.lap_reward
+                self.laps += 1
+
+            reward += self.progress_scale * delta
+
+            # No-move penalty
+            if abs(delta) == 0:
+                reward += self.no_move_penalty
+                self.no_move_steps += 1
+            else:
+                self.no_move_steps = 0
+
+            # # Lateral penalty (optional, can remove if not helpful)
+            # dist_to_wp = np.linalg.norm([ex, ey] - self.helper.waypoints[ego_idx])
+            # reward -= self.lateral_penalty * dist_to_wp
+
+            # Overtaking bonus: ahead in waypoint indices (with wrap)
+            rel_idx = (ego_idx - opp_idx) % num_wp
+            if rel_idx > 0 and rel_idx < num_wp // 2:
+                reward += self.overtaking_bonus
+
+        self.prev_idx = ego_idx
+
+        if info['collisions'][0]:
+            reward += self.collision_penalty
+
+        return reward
+
+    def is_stuck(self):
+        return self.no_move_steps >= self.no_move_limit
+
