@@ -44,6 +44,11 @@ class Trainer:
         self.agent.policy.load(path, device=device)
 
     def run_episode(self, start_poses, max_steps):
+        
+        no_progress_steps = 0
+        NO_PROGRESS_LIMIT = 50   # Number of steps allowed without meaningful progress
+        NO_MOVE_THRESH = 0.01    # As used in reward
+
         obs, info = self.env.reset(options=np.array(start_poses))
         ego_obs = obs[0]
         opp_obs = obs[1]
@@ -73,10 +78,13 @@ class Trainer:
             ego_collision = info['collisions'][0]
             
             reward = self.reward_fn(ego_pose, opp_pose, info)
-            
-            
             rewards.append(reward)
             log_probs.append(log_prob)
+            
+            # ==== Early termination check ====
+            if hasattr(self.reward_fn, 'is_stuck') and self.reward_fn.is_stuck():
+                print(f"Early termination: agent stuck at step {step}")
+                break
 
             ego_obs = next_obs[0]
             opp_obs = next_obs[1]

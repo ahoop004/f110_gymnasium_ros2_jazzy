@@ -103,7 +103,7 @@ class FastLapReward(BaseReward):
         return reward
     
 class CenterlineProgressReward(BaseReward):
-    def __init__(self, centerline_csv, step_penalty=-0.05, progress_scale=1.0, lap_reward=10.0,
+    def __init__(self, centerline_csv, step_penalty=-0.05, progress_scale=1.1, lap_reward=10.0,
                  collision_penalty=-10.0, no_move_penalty=-0.1, no_move_thresh=0.01):
         self.helper = CenterlineHelper(centerline_csv)
         self.step_penalty = step_penalty
@@ -114,10 +114,15 @@ class CenterlineProgressReward(BaseReward):
         self.no_move_thresh = no_move_thresh
         self.prev_progress = None
         self.prev_lap = 0
+        self.no_move_steps = 0
+        self.no_move_thresh = 0.01
+        self.no_move_limit = 50
+        
 
     def reset(self, start_pose=None):
         self.prev_progress = None
         self.prev_lap = 0
+        self.no_move_steps = 0
 
     def compute(self, ego_pose, opp_pose, info):
         ex, ey, _ = ego_pose
@@ -134,6 +139,9 @@ class CenterlineProgressReward(BaseReward):
 
             if abs(delta) < self.no_move_thresh:
                 reward += self.no_move_penalty
+                self.no_move_steps += 1
+            else:
+                self.no_move_steps = 0
             reward += self.progress_scale * max(0, delta)
 
         self.prev_progress = progress
@@ -142,3 +150,6 @@ class CenterlineProgressReward(BaseReward):
             reward += self.collision_penalty
 
         return reward
+    
+    def is_stuck(self):
+        return self.no_move_steps >= self.no_move_limit 
