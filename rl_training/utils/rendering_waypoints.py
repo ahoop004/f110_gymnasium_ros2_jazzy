@@ -474,78 +474,45 @@ class EnvRenderer(pyglet.window.Window):
                     color=('B', color * n_points)
                 )
         return callback
-    
-    def make_waypoints_callback(waypoints_csv_path, passed_flags=None, point_size=3):
+
+    def make_waypoints_callback(waypoints_csv_path, point_size=3):
         """
-        Create a callback function that draws a set of waypoints and updates their colors
-        based on whether they've been passed.
+        Create a callback function that draws a set of waypoints instead of the full centerline.
 
         Args:
-            waypoints_csv_path (str): Path to a CSV file with at least two columns (x, y).
-            passed_flags (list or None): Boolean list indicating which waypoints have been passed.
-                Waypoints set to True are drawn red. If None, colors stay static.
-            point_size (int): Size of the rendered points.
+            waypoints_csv_path (str): Path to a CSV file containing waypoint coordinates. The CSV should
+                have two columns without a header, representing x and y coordinates in meters.
+            point_size (int, optional): Size of the rendered points. Defaults to 3.
 
         Returns:
-            Callable[[EnvRenderer], None]: A callback usable with add_render_callback().
+            Callable[[EnvRenderer], None]: A callback that can be passed to an environment's render
+                callbacks to draw the waypoints.
         """
-
+        # load waypoints CSV (assume no header)
         df = pd.read_csv(waypoints_csv_path, header=None, comment='#')
         if df.shape[1] < 2:
-            raise ValueError(f"{waypoints_csv_path} must have at least two columns for x and y.")
-        waypoints = df.iloc[:, :2].values
+            raise ValueError(f"Waypoint CSV at {waypoints_csv_path} must have at least two columns for x and y coordinates.")
+        waypoints = df.iloc[:, :2].values  # use only first two columns
 
+        # scale coordinates to match rendering (same as centerline scaling)
         scale = 50.0
         waypoints_scaled = waypoints * scale
-        num_points = len(waypoints_scaled)
-
-        # initial colors: first waypoint white, others yellow
-        initial_colors = []
-        for i in range(num_points):
-            if i == 0:
-                initial_colors.extend([255, 255, 255])  # white
-            else:
-                initial_colors.extend([255, 255, 0])    # yellow
 
         def callback(env_renderer):
             glPointSize(point_size)
+            # create vertex list once
+            if not hasattr(env_renderer, '_waypoints_vlist'):
+                n_points = waypoints_scaled.shape[0]
+                positions = waypoints_scaled.flatten().tolist()
+                # choose a distinct color (e.g., yellow) for waypoints
+                color = [255, 255, 0]
+                env_renderer._waypoints_vlist = env_renderer.shader.vertex_list(
+                    n_points,
+                    pyglet.gl.GL_POINTS,
+                    batch=env_renderer.batch,
+                    group=env_renderer.shader_group,
+                    position=('f', positions),
+                    color=('B', color * n_points)
+                )
 
-            # Determine current target: the first False in passed_flags
-            current_idx = None
-            if passed_flags is not None:
-                for i, passed in enumerate(passed_flags):
-                    if not passed:
-                        current_idx = i
-                        break
-
-            # Delete the previous waypoint vertex list if it exists
-            if hasattr(env_renderer, '_waypoints_vlist'):
-                try:
-                    env_renderer._waypoints_vlist.delete()
-                except Exception:
-                    pass
-                del env_renderer._waypoints_vlist
-
-            # Build a color array: passed → red, current → white, unpassed → yellow
-            color_data = []
-            for idx in range(num_points):
-                if passed_flags and idx < len(passed_flags) and passed_flags[idx]:
-                    color_data.extend([255, 0, 0])      # red
-                elif current_idx is not None and idx == current_idx:
-                    color_data.extend([255, 255, 255])  # white
-                else:
-                    color_data.extend([255, 255, 0])    # yellow
-
-            # Create a new vertex list with updated colors
-            positions = waypoints_scaled.flatten().tolist()
-            env_renderer._waypoints_vlist = env_renderer.shader.vertex_list(
-                num_points,
-                pyglet.gl.GL_POINTS,
-                batch=env_renderer.batch,
-                group=env_renderer.shader_group,
-                position=('f', positions),
-                color=('B', color_data)
-            )
         return callback
-
-
