@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from utils.rewards import SimplePassReward, FastLapReward
 from utils.gap_follow import gap_follow_action
+from f110_gym.envs.rendering import EnvRenderer as ER
 
 class Trainer:
     def __init__(self, env, agent, gamma, reward_fn=None, render=False):
@@ -17,6 +18,8 @@ class Trainer:
             while hasattr(unwrapped_env, "env"):
                 unwrapped_env = unwrapped_env.env
             unwrapped_env.add_render_callback(self.render_callback)
+            centerline_callback = ER.make_centerline_callback("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/cenerlines/Shanghai_map.csv")
+            unwrapped_env.add_render_callback(centerline_callback)
         
     def render_callback(self,env_renderer):
     # custom extra drawing function

@@ -37,7 +37,7 @@ from pyglet.graphics import Group, ShaderGroup
 import numpy as np
 from PIL import Image
 import yaml
-
+import pandas as pd
 # helpers
 from f110_gym.envs.collision_models import get_vertices
 from .shader import get_default_shader
@@ -450,3 +450,26 @@ class EnvRenderer(pyglet.window.Window):
         px = (x - origin_x) / resolution
         py = (y - origin_y) / resolution
         return px, py
+    
+    def make_centerline_callback(centerline_csv_path):
+    # Read the CSV, skipping the header/comment row(s)
+        df = pd.read_csv(centerline_csv_path, comment='#', header=None)
+        # Only x and y columns
+        waypoints = df[[0, 1]].values  # shape (N,2)
+
+        scale = 50.0  # Match EnvRenderer scaling
+        waypoints_scaled = waypoints * scale
+
+        def callback(env_renderer):
+            if not hasattr(env_renderer, '_centerline_vlist'):
+                n_points = waypoints_scaled.shape[0]
+                positions = waypoints_scaled.flatten().tolist()
+                color = [0, 255, 0]  
+
+                env_renderer._centerline_vlist = env_renderer.shader.vertex_list(
+                    n_points, pyglet.gl.GL_LINE_STRIP, batch=env_renderer.batch,
+                    group=env_renderer.shader_group,
+                    position=('f', positions),
+                    color=('B', color * n_points)
+                )
+        return callback

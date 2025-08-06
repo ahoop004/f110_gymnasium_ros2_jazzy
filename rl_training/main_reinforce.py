@@ -17,6 +17,7 @@ env = gym.make('f110_gym:f110-v0',
             #    integrator=Integrator.Euler
                )
 
+
 obs_dim = env.observation_space.shape[1]
 act_dim = env.action_space.spaces[0].shape[0]
 
