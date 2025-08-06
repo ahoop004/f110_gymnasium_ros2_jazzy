@@ -103,12 +103,15 @@ class FastLapReward(BaseReward):
         return reward
     
 class CenterlineProgressReward(BaseReward):
-    def __init__(self, centerline_csv, step_penalty=-0.05, progress_scale=1.0, lap_reward=10.0, collision_penalty=-10.0):
+    def __init__(self, centerline_csv, step_penalty=-0.05, progress_scale=1.0, lap_reward=10.0,
+                 collision_penalty=-10.0, no_move_penalty=-0.1, no_move_thresh=0.01):
         self.helper = CenterlineHelper(centerline_csv)
         self.step_penalty = step_penalty
         self.progress_scale = progress_scale
         self.lap_reward = lap_reward
         self.collision_penalty = collision_penalty
+        self.no_move_penalty = no_move_penalty
+        self.no_move_thresh = no_move_thresh
         self.prev_progress = None
         self.prev_lap = 0
 
@@ -123,17 +126,18 @@ class CenterlineProgressReward(BaseReward):
 
         if self.prev_progress is not None:
             delta = progress - self.prev_progress
-            # Handle wrap-around (lap complete)
             if delta < -0.5 * self.helper.total_length:
                 delta += self.helper.total_length
                 reward += self.lap_reward
             elif delta > 0.5 * self.helper.total_length:
-                delta -= self.helper.total_length  # unlikely, but for robustness
+                delta -= self.helper.total_length
 
+            if abs(delta) < self.no_move_thresh:
+                reward += self.no_move_penalty
             reward += self.progress_scale * max(0, delta)
+
         self.prev_progress = progress
 
-        # Collision penalty
         if info['collisions'][0]:
             reward += self.collision_penalty
 
