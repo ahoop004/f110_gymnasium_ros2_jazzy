@@ -10,7 +10,7 @@ class Trainer:
         self.agent = agent
         self.gamma = gamma
         self.render = render
-        self.reward_fn = WaypointProgressReward("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/cenerlines/Shanghai_map.csv")
+        self.reward_fn = WaypointProgressReward("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/cenerlines/Shanghai_waypoints.csv")
 
         if self.render:
             # Unwrap to raw F110Env
@@ -18,7 +18,7 @@ class Trainer:
             while hasattr(unwrapped_env, "env"):
                 unwrapped_env = unwrapped_env.env
             unwrapped_env.add_render_callback(self.render_callback)
-            centerline_callback = ER.make_centerline_callback("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/cenerlines/Shanghai_map.csv")
+            centerline_callback = ER.make_waypoints_callback("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/cenerlines/Shanghai_waypoints.csv")
             unwrapped_env.add_render_callback(centerline_callback)
         
     def render_callback(self,env_renderer):

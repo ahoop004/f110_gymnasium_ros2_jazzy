@@ -474,3 +474,23 @@ class EnvRenderer(pyglet.window.Window):
                     color=('B', color * n_points)
                 )
         return callback
+    
+    def make_waypoints_callback(waypoints_csv_path, point_size=3):
+        df = pd.read_csv(waypoints_csv_path, header=None, comment='#')
+        waypoints = df.iloc[:, :2].values
+        scale = 50.0
+        waypoints_scaled = waypoints * scale
+        def callback(env_renderer):
+            glPointSize(point_size)
+            if not hasattr(env_renderer, '_waypoints_vlist'):
+                n_points = waypoints_scaled.shape[0]
+                positions = waypoints_scaled.flatten().tolist()
+                color = [255, 255, 0]  # yellow
+                env_renderer._waypoints_vlist = env_renderer.shader.vertex_list(
+                    n_points, pyglet.gl.GL_POINTS, batch=env_renderer.batch,
+                    group=env_renderer.shader_group,
+                    position=('f', positions),
+                    color=('B', color * n_points)
+                )
+        return callback
+
