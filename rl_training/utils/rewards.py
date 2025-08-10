@@ -18,7 +18,7 @@ class SimplePassReward(BaseReward):
     """
     Reward for staying in front of the opponent and penalizing collisions.
     """
-    def __init__(self, step_penalty=-0.01, pass_bonus=1.0, collision_penalty=-10.0):
+    def __init__(self, step_penalty=-0.01, pass_bonus=10.0, collision_penalty=-10.0):
         self.step_penalty = step_penalty
         self.pass_bonus = pass_bonus
         self.collision_penalty = collision_penalty

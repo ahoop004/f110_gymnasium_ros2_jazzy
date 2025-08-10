@@ -358,6 +358,7 @@ class EnvRenderer(pyglet.window.Window):
         self.poses = poses
 
         self._draw_lidar_endpoints(obs)
+        self.render_callback()
         self.score_label.text = 'Lap Time: {laptime:.2f}, Ego Lap Count: {count:.0f}'.format(laptime=obs['lap_times'][0], count=obs['lap_counts'][obs['ego_idx']])
 
     def _draw_lidar_beams(self, obs):
@@ -549,3 +550,18 @@ class EnvRenderer(pyglet.window.Window):
         return callback
 
 
+    def render_callback(self):
+    # custom extra drawing function
+
+        # e = env_renderer
+
+        # update camera to follow car
+        x = self.cars[0].position[::2]
+        y = self.cars[0].position[1::2]
+        top, bottom, left, right = max(y), min(y), min(x), max(x)
+        self.score_label.x = left
+        self.score_label.y = top - 700
+        self.left = left - 800
+        self.right = right + 800
+        self.top = top + 800
+        self.bottom = bottom - 800

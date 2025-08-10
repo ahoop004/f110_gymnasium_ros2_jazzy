@@ -3,6 +3,7 @@ agent_hyperparameters:
   gamma: 0.99
 
 env_settings:
+  model_path: "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models/policy_final.pth"
   savepath: "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models" 
   loadpath: "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/models"    
   map_dir: '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/'

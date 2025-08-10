@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from utils.rewards import CenterlineProgressReward
+from utils.rewards import CenterlineProgressReward, SimplePassReward
 from utils.gap_follow import gap_follow_action
 from f110_gym.envs.rendering import EnvRenderer as ER
 
@@ -10,16 +10,17 @@ class Trainer:
         self.agent = agent
         self.gamma = gamma
         self.render = render
-        self.reward_fn = CenterlineProgressReward("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/cenerlines/Shanghai_waypoints.csv")
+        # self.reward_fn = CenterlineProgressReward("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/cenerlines/Shanghai_waypoints.csv")
+        self.reward_fn = SimplePassReward()
 
-        if self.render:
-            # Unwrap to raw F110Env
-            unwrapped_env = self.env
-            while hasattr(unwrapped_env, "env"):
-                unwrapped_env = unwrapped_env.env
-            unwrapped_env.add_render_callback(self.render_callback)
-            centerline_callback = ER.make_waypoints_callback("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/cenerlines/Shanghai_waypoints.csv")
-            unwrapped_env.add_render_callback(centerline_callback)
+        # if self.render:
+        #     # Unwrap to raw F110Env
+        #     unwrapped_env = self.env
+        #     while hasattr(unwrapped_env, "env"):
+        #         unwrapped_env = unwrapped_env.env
+        #     unwrapped_env.add_render_callback(self.render_callback)
+        #     centerline_callback = ER.make_waypoints_callback("/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/cenerlines/Shanghai_waypoints.csv")
+        #     unwrapped_env.add_render_callback(centerline_callback)
         
     def render_callback(self,env_renderer):
     # custom extra drawing function
@@ -37,11 +38,7 @@ class Trainer:
         e.top = top + 800
         e.bottom = bottom - 800
 
-    def save_model(self, path):
-        self.agent.policy.save(path)
-    
-    def load_model(self, path, device='cpu'):
-        self.agent.policy.load(path, device=device)
+
 
     def run_episode(self, start_poses, max_steps):
         
@@ -49,7 +46,7 @@ class Trainer:
         ego_obs = obs[0]
         opp_obs = obs[1]
         log_probs, rewards = [], []
-        self.reward_fn.reset()
+        # self.reward_fn.reset()
         self.env.render()
         for step in range(max_steps):
             ego_action_raw, log_prob = self.agent.select_action(ego_obs)
@@ -87,17 +84,8 @@ class Trainer:
                 break
             self.env.render()
 
-        returns = self.compute_returns(rewards)
-        self.agent.update_policy(torch.stack(log_probs), returns)
+        # returns = self.agent.compute_returns(rewards)
+        self.agent.update_policy(torch.stack(log_probs), rewards)
 
         return sum(rewards)
 
-    def compute_returns(self, rewards):
-        returns = []
-        R = 0
-        for r in reversed(rewards):
-            R = r + self.gamma * R
-            returns.insert(0, R)
-        returns = torch.FloatTensor(returns)
-        returns = (returns - returns.mean()) / (returns.std() + 1e-5)
-        return returns
