@@ -146,13 +146,13 @@ reward_fn = CenterlineSafetyProgressReward(
 )
 global_step = 0
 
+best_reward = 0
 for episode in range(episodes):
     reward_fn.reset()
     obs, info = env.reset(options=np.array(start_poses, dtype=np.float32))
     # obs = flatten_obs(obs)
     # env.render()
     # Build flat obs for the actor from the dict
-    best_reward = 0
     total_r = 0.0
     steps   = 0
     eval_mode = (episode % eval_every_eps == 0 and episode > 0)
