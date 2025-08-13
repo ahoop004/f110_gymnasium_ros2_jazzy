@@ -152,7 +152,7 @@ for episode in range(episodes):
     # obs = flatten_obs(obs)
     # env.render()
     # Build flat obs for the actor from the dict
-
+    best_reward = 0
     total_r = 0.0
     steps   = 0
     eval_mode = (episode % eval_every_eps == 0 and episode > 0)
@@ -191,6 +191,7 @@ for episode in range(episodes):
         steps       += 1
         global_step += 1
         obs     = next_obs
+        
 
         # Optional early termination from reward helper
         if hasattr(reward_fn, 'is_stuck') and reward_fn.is_stuck():
@@ -206,6 +207,11 @@ for episode in range(episodes):
             agent.save_model(os.path.basename(ckpt_name))
             print(f"Saved checkpoint @ step {global_step}")
 
+    if total_r > best_reward:
+        best_reward = total_r
+        agent.save_model(os.path.basename("best.pt"))
+        print(f"Saved Best @ episode {episode}")
+            
     mode_str = "EVAL" if eval_mode else "TRAIN"
     print(f"Ep {episode:04d} [{mode_str}] | R: {total_r:.2f} | steps: {steps} | buf: {len(agent.memory)}")
 
