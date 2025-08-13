@@ -207,13 +207,13 @@ for episode in range(episodes):
             agent.save_model(os.path.basename(ckpt_name))
             print(f"Saved checkpoint @ step {global_step}")
 
-    if total_r > best_reward:
-        best_reward = total_r
-        agent.save_model(os.path.basename("best.pt"))
-        print(f" Best {best_reward:.2f} @ episode {episode-1}")
             
     mode_str = "EVAL" if eval_mode else "TRAIN"
     print(f"Ep {episode:04d} [{mode_str}] | R: {total_r:.2f} | steps: {steps} | buf: {len(agent.memory)}")
+    if total_r > best_reward:
+        best_reward = total_r
+        agent.save_model(os.path.basename("best.pt"))
+        print(f" Best {best_reward:.2f} @ episode {episode}")
 
 # Final save
 agent.save_model(os.path.basename(ckpt_name))
