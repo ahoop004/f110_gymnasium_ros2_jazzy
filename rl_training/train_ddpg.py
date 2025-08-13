@@ -108,7 +108,7 @@ agent = DDPGAgent(
 )
 ckpt_path = os.path.join(model_path, ckpt_name)
 if os.path.exists(ckpt_path):
-    agent.load_model(ckpt_name)
+    agent.load_model('best.pt')
 
 # reward_fn = FrontFlankHerdReward(
 #     dt=env.unwrapped.timestep,
@@ -128,7 +128,7 @@ reward_fn = CenterlineSafetyProgressReward(
     dt=env.unwrapped.timestep,
     progress=P,
     # Make going forward clearly “worth it”
-    w_prog=2.20,            # ↑ from 1.2
+    w_prog=5.0,            # ↑ from 1.2
     alive_bonus=0.5,      # ↑ from 0.02
     # Soften early punishment (curriculum)
     grace_steps_wall=25,  # ↑
