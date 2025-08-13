@@ -49,10 +49,10 @@ def gap_follow_action(scan_ranges, angle_min=-np.pi/2, angle_increment=np.pi/108
     steering_angle = angle_min + best_point * angle_increment
 
     if abs(steering_angle) < np.radians(10):
-        speed = 1.5
+        speed = 2.5
     elif abs(steering_angle) < np.radians(20):
-        speed = 1.0
+        speed = 2
     else:
-        speed = 0.5
+        speed = 1.5
 
     return np.array([steering_angle, speed])

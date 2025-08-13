@@ -1,0 +1,75 @@
+
+env_settings:
+  model_path: "/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/DDPG/models/"
+  checkpoint_filename: "ddpg_checkpoint.pt"
+  map_dir: '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/'
+  map: 'Shanghai_map'
+  map_ext: '.png'
+  
+  start_poses:
+
+    - [0.0, 0.0, 0]   # Ego start pose
+    - [3.0, 0.5, 0]   # Opponent start pose
+  lidar_max: 30.0         # used for obs space bounds
+
+
+  # ---- Action bounds (per-dimension) ----
+  # steer in [-1, 1], velocity in [v_min, v_max] — adjust to your controller
+  # action_low:  [-0.4189, -5.0]
+  action_low:  [-0.4189, 0.0]
+  action_high: [ 0.4189, 20.0]
+
+
+training_settings:
+  seed: 42 
+  episodes: 10000
+  max_steps: 50000
+  warmup_steps: 1000            # fill replay before learning
+  eval_interval_episodes: 10    # run noise-free eval this often
+  save_interval_steps: 5000
+
+agent_hyperparameters:
+  # ---- Core RL ----
+  gamma: 0.99
+  tau: 0.005                      # Polyak coefficient
+  # tau: 0.05
+
+  # ---- Optimizers ----
+  actor_lr:  1.0e-4
+  critic_lr: 1.0e-3
+
+  # ---- Replay / PER ----
+  memory_size: 10000
+  batch_size: 128
+  per:
+    alpha: 0.6
+    beta: 0.4
+    priority_epsilon: 1.0e-5
+
+  # ---- Exploration noise (training only) ----
+  noise:
+    type: "gaussian"              # "gaussian" or "ou"
+    sigma_start: 0.20
+    sigma_min: 0.02
+    decay: 0.9995
+
+
+car_parameters:
+  mu: 1.0489
+  C_Sf: 4.718
+  C_Sr: 5.4562
+  lf: 0.15875
+  lr: 0.17145
+  h: 0.074
+  m: 3.74
+  I: 0.04712
+  s_min: -0.4189
+  s_max: 0.4189
+  sv_min: -3.2
+  sv_max: 3.2
+  v_switch: 7.319
+  a_max: 9.51
+  v_min: -5.0
+  v_max: 20.0
+  width: 0.31
+  length: 0.58

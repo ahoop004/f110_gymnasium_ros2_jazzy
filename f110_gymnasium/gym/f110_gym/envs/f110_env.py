@@ -137,22 +137,23 @@ class F110Env(gym.Env):
                            'h': 0.074,
                            'm': 3.74,
                            'I': 0.04712,
-                           's_min': -0.2,
-                           's_max': 0.2,
-                        #    's_min': -0.4189,
-                        #    's_max': 0.4189,
+                        #    's_min': -0.314,
+                        #    's_max': 0.314,
+                           's_min': -0.4189,
+                           's_max': 0.4189,
                            'sv_min': -3.2,
                            'sv_max': 3.2,
                             # 'sv_min': -1.0,
                             # 'sv_max': 1.0,
                            'v_switch': 7.319,
                            'a_max': 9.51,
-                           'v_min': -0.1,
-                           'v_max': 5.0,
+                           'v_min': 0.00000001,
+                           'v_max': 20.0,
                         #    'v_min':-5.0,
                         #    'v_max': 20.0,
                            'width': 0.31,
-                           'length': 0.58}
+                           'length': 0.58,
+                           'lidar_max': 30.0}
 
         # simulation parameters
         try:
@@ -184,7 +185,7 @@ class F110Env(gym.Env):
             self.lidar_dist = 0.0
 
         # radius to consider done
-        self.start_thresh = 0.5  # 10cm
+        self.start_thresh = 0.1  # 10cm
 
         # env states
         self.poses_x = []
@@ -193,6 +194,8 @@ class F110Env(gym.Env):
         self.collisions = np.zeros((self.num_agents, ))
         # TODO: collision_idx not used yet
         # self.collision_idx = -1 * np.ones((self.num_agents, ))
+        
+        self.lidar_max = self.params["lidar_max"]
             
 
         # loop completion
@@ -230,12 +233,14 @@ class F110Env(gym.Env):
 
         # stateful observations for rendering
         self.render_obs = None
-        single_action_space = spaces.Box(
-            low=np.array([self.params['s_min'], self.params['v_min']], dtype=np.float32),
-            high=np.array([self.params['s_max'], self.params['v_max']], dtype=np.float32),
+        low  = np.array([self.params['s_min'], self.params['v_min']], dtype=np.float32)
+        high = np.array([self.params['s_max'], self.params['v_max']], dtype=np.float32)
+        self.action_space = spaces.Box(
+            low=np.tile(low,  (self.num_agents, 1)),
+            high=np.tile(high, (self.num_agents, 1)),
             dtype=np.float32
         )
-        self.action_space = spaces.Tuple((single_action_space, single_action_space))
+        # self.action_space = spaces.Tuple((single_action_space, single_action_space))
         
         
         # scan_space = spaces.Box(low=0.0, high=30.0, shape=(1080,), dtype=np.float32)
@@ -249,12 +254,13 @@ class F110Env(gym.Env):
         #     'pose': pose_space,
         #     'collision': spaces.Discrete(2),
         # })
+
         
         # spaces_dict_obs = spaces.Dict({
         #     'ego_idx': spaces.Discrete(self.num_agents),
         #     'scans': spaces.Box(low=0.0, high=30.0, shape=(self.num_agents, 1080), dtype=np.float32),
-        #     'poses_x': spaces.Box(low=x_min, high=x_max, shape=(self.num_agents,), dtype=np.float32),
-        #     'poses_y': spaces.Box(low=y_min, high=y_max, shape=(self.num_agents,), dtype=np.float32),
+        #     'poses_x': spaces.Box(low=self.x_min, high=self.x_max, shape=(self.num_agents,), dtype=np.float32),
+        #     'poses_y': spaces.Box(low=self.y_min, high=self.y_max, shape=(self.num_agents,), dtype=np.float32),
         #     'poses_theta': spaces.Box(low=-np.pi, high=np.pi, shape=(self.num_agents,), dtype=np.float32),
         #     'linear_vels_x': spaces.Box(low=self.params['v_min'], high=self.params['v_max'], shape=(self.num_agents,), dtype=np.float32),
         #     'linear_vels_y': spaces.Box(low=self.params['v_min'], high=self.params['v_max'], shape=(self.num_agents,), dtype=np.float32),
@@ -268,7 +274,30 @@ class F110Env(gym.Env):
         
         
         # self.observation_space = spaces_dict_obs
-        self.observation_space = spaces.Box(low=0.0, high=30.0, shape=(self.num_agents, 1080), dtype=np.float32)
+        # self.observation_space = spaces.Box(low=0.0, high=30.0, shape=(self.num_agents, 1080), dtype=np.float32)
+        # spaces_dict_obs = spaces.Dict({
+        # "ego_scan":     spaces.Box(low=0.0, high=self.params["lidar_max"], shape=(1080,), dtype=np.float32),
+
+        # "ego_x":        spaces.Box(low=self.x_min, high=self.x_max, shape=(), dtype=np.float32),
+        # "ego_y":        spaces.Box(low=self.y_min, high=self.y_max, shape=(), dtype=np.float32),
+        # "ego_theta":    spaces.Box(low=-np.pi, high=np.pi,   shape=(), dtype=np.float32),
+        # "ego_collision":spaces.MultiBinary(1),
+
+        # "opp_x":        spaces.Box(low=self.x_min, high=self.x_max, shape=(), dtype=np.float32),
+        # "opp_y":        spaces.Box(low=self.y_min, high=self.y_max, shape=(), dtype=np.float32),
+        # "opp_collision":spaces.MultiBinary(1),
+        # })
+        # self.observation_space = spaces_dict_obs
+        
+        low  = np.array(
+        [0.0]*1080 + [self.x_min, self.y_min, -np.pi, 0.0, self.x_min, self.y_min, -np.pi, 0.0],
+        dtype=np.float32
+        )
+        high = np.array(
+            [1.0]*1080 + [self.x_max, self.y_max,  np.pi, 1.0, self.x_max, self.y_max, np.pi, 1.0],
+            dtype=np.float32
+        )
+        self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
         
 
@@ -337,19 +366,7 @@ class F110Env(gym.Env):
         self.poses_theta = obs_dict['poses_theta']
         self.collisions = obs_dict['collisions']
         
-    def clean_obs(self,obs):
-        # Fields that should be numpy arrays of float32
-        array_fields = [
-            'scans', 'poses_x', 'poses_y', 'poses_theta',
-            'linear_vels_x', 'linear_vels_y', 'ang_vels_z'
-        ]
-        for k in array_fields:
-            v = obs.get(k)
-            if isinstance(v, list) or (isinstance(v, np.ndarray) and v.dtype != np.float32):
-                obs[k] = np.array(v, dtype=np.float32)
-        # collisions, lap_times, lap_counts are already correct!
-        # ego_idx is an int (good)
-        return obs
+
 
     def step(self, action):
         """
@@ -366,22 +383,22 @@ class F110Env(gym.Env):
         """
         
         # call simulation step
-        obs = self.sim.step(action)
-
+        obs_dict = self.sim.step(action)
         
-        obs['lap_times'] = self.lap_times.astype(np.float32)
-        obs['lap_counts'] = self.lap_counts.astype(np.float32)
+        
+        obs_dict['lap_times'] = self.lap_times.astype(np.float32)
+        obs_dict['lap_counts'] = self.lap_counts.astype(np.float32)
 
-        F110Env.current_obs = obs
+        F110Env.current_obs = obs_dict
 
         self.render_obs = {
-            'ego_idx': obs['ego_idx'],
-            'poses_x': obs['poses_x'],
-            'poses_y': obs['poses_y'],
-            'poses_theta': obs['poses_theta'],
-            'lap_times': obs['lap_times'],
-            'lap_counts': obs['lap_counts'],
-            'scans': obs['scans']
+            'ego_idx': obs_dict['ego_idx'],
+            'poses_x': obs_dict['poses_x'],
+            'poses_y': obs_dict['poses_y'],
+            'poses_theta': obs_dict['poses_theta'],
+            'lap_times': obs_dict['lap_times'],
+            'lap_counts': obs_dict['lap_counts'],
+            'scans': obs_dict['scans']
             }
 
         # times
@@ -389,21 +406,21 @@ class F110Env(gym.Env):
         self.current_time = self.current_time + self.timestep
         
 
-        self._update_state(obs)
+        self._update_state(obs_dict)
 
         # check done
         terminated, toggle_list = self._check_done()
         truncated = False
-        # info = {'checkpoint_done': toggle_list}
-        info = {k: v for k, v in obs.items() if k != 'scans'}
-        info['checkpoint_done'] = toggle_list
+        obs_flat = self._pack_flat_obs(obs_dict)
+        info     = self._build_info(obs_dict)
+        info["checkpoint_done"] = toggle_list
+        
 
-        # LiDAR obs: always float32 array
-        lidar_obs = np.array(obs['scans'], dtype=np.float32)
-        lidar_obs = np.clip(lidar_obs, 0.0, 30.0) 
-        return lidar_obs, reward, terminated, truncated, info
+
+
+        return obs_flat, reward, terminated, truncated, info
   
-        # return obs, reward, terminated, truncated, info
+
 
     def reset(self, seed=None, options=None):
         """
@@ -437,12 +454,10 @@ class F110Env(gym.Env):
         self.sim.reset(poses)
 
         # get no input observations
-        action = np.zeros((self.num_agents, 2))
-        obs, reward, terminated, truncated, info = self.step(action)
-        lidar_obs = obs
-        
+        zero_action = np.zeros((self.num_agents, 2), dtype=np.float32)
+        obs_flat, reward, terminated, truncated, info = self.step(zero_action)
 
-      
+
         self.render_obs = {
             'ego_idx': info['ego_idx'],
             'poses_x': info['poses_x'],
@@ -450,10 +465,11 @@ class F110Env(gym.Env):
             'poses_theta': info['poses_theta'],
             'lap_times': info['lap_times'],
             'lap_counts': info['lap_counts'],
-            'scans': obs
+            'scans': info['scans']
             }
-        lidar_obs = np.clip(lidar_obs, 0.0, 30.0) 
-        return lidar_obs, info
+
+        
+        return obs_flat, info
 
     def update_map(self, map_path, map_ext):
         """
@@ -529,3 +545,58 @@ class F110Env(gym.Env):
             time.sleep(0.005)
         elif mode == 'human_fast':
             pass
+    def _wrap_angle(self, a):
+        # wrap to [-pi, pi]
+        return ((a + np.pi) % (2 * np.pi)) - np.pi
+
+    def _pack_flat_obs(self, obs_dict) -> np.ndarray:
+        # ego / opp indices
+        e, o = 0, 1
+
+        # lidar
+        ego_lidar = np.asarray(obs_dict["scans"][e], dtype=np.float32)
+        
+        ego_lidar = np.nan_to_num(ego_lidar, nan=self.lidar_max, posinf=self.lidar_max, neginf=0.0)
+        ego_lidar = np.clip(ego_lidar, 0.0, self.lidar_max) / self.lidar_max
+        # poses
+        ego_x = float(obs_dict["poses_x"][e])
+        ego_y = float(obs_dict["poses_y"][e])
+        ego_th = self._wrap_angle(float(obs_dict["poses_theta"][e]))
+
+        opp_x = float(obs_dict["poses_x"][o])
+        opp_y = float(obs_dict["poses_y"][o])
+        opp_th = self._wrap_angle(float(obs_dict["poses_theta"][o]))
+        
+
+        # collisions -> float32 in {0.0, 1.0}
+        ego_col = float(bool(obs_dict["collisions"][e]))
+        opp_col = float(bool(obs_dict["collisions"][o]))
+
+        flat = np.concatenate([
+            ego_lidar,                                    # 1080
+            np.array([ego_x, ego_y, ego_th, ego_col,
+                    opp_x, opp_y,opp_th, opp_col], np.float32)  # 8
+        ], dtype=np.float32)
+
+        # sanity: should be 1088
+        if flat.shape[0] != 1088:
+            raise RuntimeError(f"Flat obs length {flat.shape[0]} != 1088")
+        return flat
+
+    def _build_info(self, obs_dict):
+        # Keep the rest here for debugging/analysis/visualization
+        return {
+            "ego_idx":       int(obs_dict["ego_idx"]),
+            "poses_x":       np.asarray(obs_dict["poses_x"], dtype=np.float32),
+            "poses_y":       np.asarray(obs_dict["poses_y"], dtype=np.float32),
+            "poses_theta":   np.asarray(obs_dict["poses_theta"], dtype=np.float32),
+            "linear_vels_x": np.asarray(obs_dict["linear_vels_x"], dtype=np.float32),
+            "linear_vels_y": np.asarray(obs_dict["linear_vels_y"], dtype=np.float32),
+            "ang_vels_z":    np.asarray(obs_dict["ang_vels_z"], dtype=np.float32),
+            "collisions":    np.asarray(obs_dict["collisions"], dtype=np.int8),
+            "lap_times":     self.lap_times.astype(np.float32),
+            "lap_counts":    self.lap_counts.astype(np.float32),
+            "scans":         [np.asarray(s, dtype=np.float32) for s in obs_dict["scans"]],
+            "checkpoint_done": getattr(self, "toggle_list", None),
+            "time":          float(self.current_time),
+        }

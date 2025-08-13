@@ -280,7 +280,8 @@ class RaceCar(object):
 
         # steering angle velocity input to steering velocity acceleration input
         accl, sv = pid(vel, steer, self.state[3], self.state[2], self.params['sv_max'], self.params['a_max'], self.params['v_max'], self.params['v_min'])
-        
+        sv   = np.clip(sv,   self.params['sv_min'], self.params['sv_max'])
+        accl = np.clip(accl, -self.params['a_max'], self.params['a_max'])
         if self.integrator is Integrator.RK4:
             # RK4 integration
             k1 = vehicle_dynamics_st(
@@ -396,7 +397,8 @@ class RaceCar(object):
         
         else:
             raise SyntaxError(f"Invalid Integrator Specified. Provided {self.integrator.name}. Please choose RK4 or Euler")
-
+        self.state[2] = np.clip(self.state[2], self.params['s_min'], self.params['s_max'])
+        self.state[3] = np.clip(self.state[3], self.params['v_min'], self.params['v_max'])
         # bound yaw angle
         # if self.state[4] > 2*np.pi:
         #     self.state[4] = self.state[4] - 2*np.pi
@@ -404,6 +406,15 @@ class RaceCar(object):
         #     self.state[4] = self.state[4] + 2*np.pi
         
         self.state[4] = (self.state[4] + np.pi) % (2 * np.pi) - np.pi
+        
+        YAW_RATE_CAP = 10.0  # rad/s (tune if needed)
+        self.state[5] = np.nan_to_num(self.state[5], nan=0.0, posinf=YAW_RATE_CAP, neginf=-YAW_RATE_CAP)
+        self.state[5] = np.clip(self.state[5], -YAW_RATE_CAP, YAW_RATE_CAP)
+        
+        SLIP_CAP = np.deg2rad(60)
+        if self.state.shape[0] >= 7:
+            self.state[6] = np.nan_to_num(self.state[6], nan=0.0)
+            self.state[6] = np.clip(self.state[6], -SLIP_CAP, SLIP_CAP)
 
         # update scan
         scan_x = self.state[0] + self.lidar_dist*np.cos(self.state[4])
