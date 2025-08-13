@@ -27,9 +27,7 @@ class Actor(nn.Module):
 
     def __init__(self, obs_dim, act_dim, action_low: Sequence[float], action_high: Sequence[float]):
         super(Actor, self).__init__()
-        # self.layer1 = nn.Linear(n_observations, 64)
-        # self.layer2 = nn.Linear(64, 32)
-        # self.layer3 = nn.Linear(32, n_actions)
+
         self.fc1 = nn.Linear(obs_dim, 128)
         self.fc2 = nn.Linear(128, 128)
         self.fc3 = nn.Linear(128, act_dim)

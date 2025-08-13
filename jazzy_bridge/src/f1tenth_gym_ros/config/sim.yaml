@@ -43,7 +43,7 @@ bridge:
     scan_beams: 1080
 
     # map parameters
-    map_path: '/home/aaron/f110_gymnasium_ros2_jazzy/assets/maps/straight_corridor'
+    map_path: '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/maps/Shanghai_map'
     map_img_ext: '.png'
 
     # opponent parameters
