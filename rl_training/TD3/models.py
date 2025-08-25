@@ -85,7 +85,7 @@ class ActorMLP(nn.Module):
         self,
         obs_dim: int,
         act_dim: int,
-        hidden_sizes: Sequence[int] = (256, 256),
+        hidden_sizes: Sequence[int] = (128, 128),
         activation: nn.Module = nn.ReLU(),
         last_w_scale: float = 1e-3,
     ) -> None:
@@ -136,7 +136,7 @@ class QNetworkMLP(nn.Module):
         self,
         obs_dim: int,
         act_dim: int,
-        hidden_sizes: Sequence[int] = (256, 256),
+        hidden_sizes: Sequence[int] = (128, 128),
         activation: nn.Module = nn.ReLU(),
         last_w_scale: float = 1e-3,
     ) -> None:
@@ -174,7 +174,7 @@ class TwinCriticMLP(nn.Module):
         self,
         obs_dim: int,
         act_dim: int,
-        hidden_sizes: Sequence[int] = (256, 256),
+        hidden_sizes: Sequence[int] = (128, 128),
         activation: nn.Module = nn.ReLU(),
         last_w_scale: float = 1e-3,
     ) -> None:
