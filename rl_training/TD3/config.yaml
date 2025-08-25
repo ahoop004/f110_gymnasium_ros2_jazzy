@@ -3,11 +3,11 @@
 env:
   id: "f110_gym:f110-v0"
   render_mode: "human_fast"          # "none", "human_fast", etc.
-  map_dir: "/path/to/maps"           # <- change me
+  map_dir: "/home/aaron/f110_gymnasium_ros2_jazzy/assets/maps"           # <- change me
   map: "Shanghai_map"                # <- change me
   map_ext: "png"
   num_agents: 2
-  max_episode_steps: 2000
+  max_episode_steps: 5000
   seed: 42
 
   # Start poses for [ego, opp] as [x, y, yaw] in meters/radians.
@@ -70,7 +70,7 @@ opponent:
 action:
   # Exploration noise on actor output before mapping to env bounds
   train_action_noise_std: 0.10       # in normalized [-1,1] space
-
+  train_action_noise_clip: 0.50
   # Target policy smoothing for TD3 (applied to target actions)
   policy_noise: 0.20
   noise_clip: 0.50
@@ -107,6 +107,8 @@ reward:
     grace_steps_opp: 175
 
 td3:
+  actor_hidden: [256, 256]
+  critic_hidden: [256, 256]
   gamma: 0.99
   tau: 0.005
   actor_lr: 3.0e-4

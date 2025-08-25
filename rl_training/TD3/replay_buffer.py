@@ -1,159 +1,90 @@
-import collections
-import typing
+# replay_buffer.py
+# Prioritized Replay Buffer (ring buffer, array-backed) for TD3.
+# Returns batches as dicts matching agents.py expectations.
 
+from __future__ import annotations
 import numpy as np
+from typing import Dict, Tuple, Optional
 
+class PrioritizedReplayBuffer:
+    def __init__(
+        self,
+        obs_dim: int,
+        act_dim: int,
+        capacity: int = 1_000_000,
+        alpha: float = 0.6,
+        priority_eps: float = 1e-6,
+        seed: Optional[int] = None,
+    ) -> None:
+        self.obs_dim = int(obs_dim)
+        self.act_dim = int(act_dim)
+        self.capacity = int(capacity)
+        self.alpha = float(alpha)
+        self.eps = float(priority_eps)
 
-_field_names = [
-    "state",
-    "action",
-    "reward",
-    "next_state",
-    "done"
-]
-Experience = collections.namedtuple("Experience", field_names=_field_names)
+        self.obs = np.zeros((capacity, obs_dim), dtype=np.float32)
+        self.actions = np.zeros((capacity, act_dim), dtype=np.float32)  # normalized actions in [-1,1]
+        self.rewards = np.zeros((capacity, 1), dtype=np.float32)
+        self.next_obs = np.zeros((capacity, obs_dim), dtype=np.float32)
+        self.dones = np.zeros((capacity, 1), dtype=np.float32)          # 1.0 if terminal else 0.0
+        self.priorities = np.zeros((capacity,), dtype=np.float32)
 
+        self.size = 0
+        self.ptr = 0
+        self.rng = np.random.default_rng(seed)
 
-class PrioritizedExperienceReplayBuffer:
-    """
-    Fixed-size buffer to store priority, Experience tuples.
-
-    Attributes:
-        _batch_size (int): Number of experience samples per training batch.
-        _buffer_size (int): Maximum number of prioritized experience tuples stored in buffer.
-        _buffer_length (int): Current number of prioritized experience tuples in buffer.
-        _buffer (np.array): Array to store priority and experience tuples.
-        _alpha (float): Strength of prioritized sampling.
-        _random_state (np.random.RandomState): Random number generator.
-    """
-
-    def __init__(self,
-                 batch_size: int,
-                 buffer_size: int,
-                 alpha: float = 0.0,
-                 random_state: np.random.RandomState = None) -> None:
-        """
-        Initialize an ExperienceReplayBuffer object.
-
-        Args:
-            batch_size (int): Size of each training batch.
-            buffer_size (int): Maximum size of buffer.
-            alpha (float): Strength of prioritized sampling. Default to 0.0 (i.e., uniform sampling).
-            random_state (np.random.RandomState): Random number generator.
-        """
-        self._batch_size = batch_size
-        self._buffer_size = buffer_size
-        self._buffer_length = 0 # current number of prioritized experience tuples in buffer
-        self._buffer = np.empty(self._buffer_size, dtype=[("priority", np.float32), ("experience", Experience)])
-        self._alpha = alpha
-        self._random_state = np.random.RandomState() if random_state is None else random_state
-        
     def __len__(self) -> int:
-        """
-        Current number of prioritized experience tuple stored in buffer.
+        return self.size
 
-        Returns:
-            int: Number of experience tuples stored in buffer.
-        """
-        return self._buffer_length
+    def add(self, s: np.ndarray, a_norm: np.ndarray, r: float, s2: np.ndarray, d: bool, priority: Optional[float] = None) -> None:
+        idx = self.ptr
+        self.obs[idx] = s
+        self.actions[idx] = a_norm
+        self.rewards[idx, 0] = float(r)
+        self.next_obs[idx] = s2
+        self.dones[idx, 0] = 1.0 if d else 0.0
 
-    @property
-    def alpha(self):
-        """
-        Strength of prioritized sampling.
-
-        Returns:
-            float: Strength of prioritized sampling.
-        """
-        return self._alpha
-
-    @property
-    def batch_size(self) -> int:
-        """
-        Number of experience samples per training batch.
-
-        Returns:
-            int: Number of experience samples per training batch.
-        """
-        return self._batch_size
-    
-    @property
-    def buffer_size(self) -> int:
-        """
-        Maximum number of prioritized experience tuples stored in buffer.
-
-        Returns:
-            int: Maximum number of prioritized experience tuples stored in buffer.
-        """
-        return self._buffer_size
-
-    def add(self, experience: Experience) -> None:
-        """
-        Add a new experience to memory.
-
-        Args:
-            experience (Experience): Experience tuple to add to memory.
-        """
-        priority = 1.0 if self.is_empty() else self._buffer["priority"].max()
-        if self.is_full():
-            if priority > self._buffer["priority"].min():
-                idx = self._buffer["priority"].argmin()
-                self._buffer[idx] = (priority, experience)
-            else:
-                pass # low priority experiences should not be included in buffer
+        if priority is None or not np.isfinite(priority):
+            # default to max priority so new samples are learnable
+            p = self.priorities.max() if self.size > 0 else 1.0
         else:
-            self._buffer[self._buffer_length] = (priority, experience)
-            self._buffer_length += 1
+            p = float(priority)
+        self.priorities[idx] = max(p, self.eps)
 
-    def is_empty(self) -> bool:
-        """
-        Check if the buffer is empty.
+        self.ptr = (self.ptr + 1) % self.capacity
+        self.size = min(self.size + 1, self.capacity)
 
-        Returns:
-            bool: True if the buffer is empty; False otherwise.
-        """
-        return self._buffer_length == 0
-    
-    def is_full(self) -> bool:
-        """
-        Check if the buffer is full.
+    def sample(self, batch_size: int, beta: float) -> Tuple[Dict[str, np.ndarray], np.ndarray, np.ndarray]:
+        assert self.size > 0, "Cannot sample from an empty buffer."
+        N = self.size
+        ps = self.priorities[:N].astype(np.float32)
 
-        Returns:
-            bool: True if the buffer is full; False otherwise.
-        """
-        return self._buffer_length == self._buffer_size
-    
-    def sample(self, beta: float) -> typing.Tuple[np.array, np.array, np.array]:
-        """
-        Sample a batch of experiences from memory.
+        # compute sampling probabilities with stability guards
+        ps_alpha = np.power(ps + self.eps, self.alpha, dtype=np.float32)
+        denom = ps_alpha.sum()
+        if not np.isfinite(denom) or denom <= 0.0:
+            probs = np.full(N, 1.0 / N, dtype=np.float32)
+        else:
+            probs = ps_alpha / denom
 
-        Args:
-            beta (float): Beta parameter for importance sampling.
+        idxs = self.rng.choice(N, size=int(batch_size), replace=True, p=probs)
 
-        Returns:
-            typing.Tuple[np.array, np.array, np.array]: Tuple of sampled indices, experiences, and normalized weights.
-        """
-        # use sampling scheme to determine which experiences to use for learning
-        ps = self._buffer[:self._buffer_length]["priority"]
-        sampling_probs = ps**self._alpha / np.sum(ps**self._alpha)
-        idxs = self._random_state.choice(np.arange(ps.size),
-                                         size=self._batch_size,
-                                         replace=True,
-                                         p=sampling_probs)
-        
-        # select the experiences and compute sampling weights
-        experiences = self._buffer["experience"][idxs]        
-        weights = (self._buffer_length * sampling_probs[idxs])**-beta
-        normalized_weights = weights / weights.max()
-        
-        return idxs, experiences, normalized_weights
+        # importance sampling weights
+        beta = float(beta)
+        weights = np.power(N * probs[idxs], -beta, dtype=np.float32)
+        weights /= weights.max().clip(min=1e-12)
 
-    def update_priorities(self, idxs: np.array, priorities: np.array) -> None:
-        """
-        Update the priorities associated with particular experiences.
+        batch = {
+            "obs": self.obs[idxs],
+            "actions": self.actions[idxs],
+            "rewards": self.rewards[idxs],
+            "next_obs": self.next_obs[idxs],
+            "dones": self.dones[idxs],
+        }
+        return batch, idxs.astype(np.int64), weights.astype(np.float32)
 
-        Args:
-            idxs (np.array): Indices of experiences to update.
-            priorities (np.array): New priorities for the experiences.
-        """
-        self._buffer["priority"][idxs] = priorities
+    def update_priorities(self, idxs: np.ndarray, new_priorities: np.ndarray) -> None:
+        idxs = idxs.astype(np.int64, copy=False)
+        p = np.asarray(new_priorities, dtype=np.float32)
+        p = np.where(np.isfinite(p), p, 0.0)
+        self.priorities[idxs] = np.maximum(p, self.eps)
