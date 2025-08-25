@@ -1,4 +1,146 @@
+# config.yaml
+
+env:
+  id: "f110_gym:f110-v0"
+  render_mode: "human_fast"          # "none", "human_fast", etc.
+  map_dir: "/path/to/maps"           # <- change me
+  map: "Shanghai_map"                # <- change me
+  map_ext: "png"
+  num_agents: 2
+  max_episode_steps: 2000
+  seed: 42
+
+  # Start poses for [ego, opp] as [x, y, yaw] in meters/radians.
+  # Replace with your track-specific values.
+  start_poses:
+    - [0.0, 0.0, 0.0]                # ego
+    - [1.5, 0.0, 0.0]                # opponent
+
+  # Action bounds used by your env; keep speed forward-only to start.
+  action_low:  [-0.4189, 0.0]        # [steer_min(rad), speed_min(m/s)]
+  action_high: [ 0.4189, 3.0]        # [steer_max(rad), speed_max(m/s)]
+
+  # LiDAR geometry used by env/bridge
+  lidar:
+    beams: 1080
+    fov: 4.7                         # radians
+    range_max_m: 30.0                # you updated the env to 30 m
+
+obs:
+  # LiDAR normalization:
+  #   "fixed" -> always divide by lidar_fixed_max
+  #   "auto"  -> auto-calibrate effective max (good when mixing sim/ROS)
+  lidar_max_mode: "fixed"
+  lidar_fixed_max: 30.0
+  lidar_min_effective: 10.0          # floor for auto mode (ignored if fixed)
+  lidar_auto_percentile: 99.0
+  lidar_effective_ema: 0.05
+
+  # LiDAR shaping
+  lidar_downsample: 1                # pooling size (1 = no downsample)
+  history_k: 1                       # LiDAR frame stacking (1 = no history)
+
+  # Scalar normalization (should match env/action bounds)
+  v_pos_max: 3.0                     # speed normalizer (m/s)
+  yaw_rate_norm: 10.0                # matches env obs bound
+  steer_max_abs: 0.4189              # rad, for last_action norm if units='env'
+  speed_max: 3.0
+  last_action_units: "env"           # 'env' (physical) or 'normalized' ([-1,1])
+
+  # Which scalar groups to include in the vector
+  include:
+    last_action: true
+    clearance: true
+    opponent: true
+    track: false                     # requires centerline helper; keep false for now
+
+  # Sectors (degrees) used for clearance summaries
+  sectors:
+    forward_half_deg: 15.0
+    side_low_deg: 60.0
+    side_high_deg: 90.0
+
+opponent:
+  policy: "gap_follow"
+  # Optional gap-follow tuning knobs (if your helper supports them)
+  params:
+    speed_cap_mps: 2.5
+    smooth_steer: true
+
+action:
+  # Exploration noise on actor output before mapping to env bounds
+  train_action_noise_std: 0.10       # in normalized [-1,1] space
+
+  # Target policy smoothing for TD3 (applied to target actions)
+  policy_noise: 0.20
+  noise_clip: 0.50
+
+  # Optional safety governors (applied after mapping to env units)
+  governors:
+    enable_clearance_speed_cap: true
+    forward_clearance_q: 0.10        # use q10 in ±15° forward sector
+    min_clearance_m: 0.60
+    min_speed_mps: 0.0
+    max_speed_mps: 3.0
+    enable_steer_rate_limit: true
+    steer_rate_limit_rad_per_step: 0.02
+    clearance_gain: 2.0
+    enable_accel_limit: true
+    accel_limit_mps2: 1.0
+
+reward:
+  # If you replace env reward, wire your rewards.py to use these weights.
+  # Keep numbers O(1) to help stability.
+  weights:
+    progress: 5.0
+    alive_bonus: 0.5
+    wall_clearance: 0.30
+    opponent_clearance: 0.30
+    lateral_error: 0.25
+    steering_smoothness: 0.10
+  params:
+    dt: 0.01
+    wall_quantile: 0.10
+    near_wall_dist_m: 0.30
+    opponent_safe_dist_m: 0.60
+    grace_steps_wall: 25
+    grace_steps_opp: 175
+
+td3:
+  gamma: 0.99
+  tau: 0.005
+  actor_lr: 3.0e-4
+  critic_lr: 3.0e-4
+  policy_freq: 2
+  # (policy_noise/noise_clip are in action: they’re also used in the agent)
+
+per:
+  alpha: 0.6
+  beta_init: 0.4
+  beta_final: 1.0
+  capacity: 1000000
+  priority_epsilon: 1.0e-6
+
+train:
+  total_steps: 1000000
+  warmup_steps: 10000
+  update_after: 10000
+  batch_size: 256
+  updates_per_step: 1
+  eval_every_steps: 10000
+  save_every_steps: 50000
+  seed: 42
+  render: false
+
 paths:
+  run_name: "td3_limo_base"
+  checkpoints_dir: "./checkpoints"
+  logs_dir: "./logs"
 
-
-
+logging:
+  enable_tensorboard: false
+  enable_wandb: false
+  project: "td3-limo"
+  entity: ""                          # your wandb username/org if used
+  print_every_steps: 1000
+  video_every_eval: 0                 # 0 to disable
