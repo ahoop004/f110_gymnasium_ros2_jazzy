@@ -49,7 +49,7 @@ bridge:
     # opponent parameters
     num_agent: 2
 
-    
+    model: '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/DDPG/models/ddpg_checkpoint.pt'
 
     # ego starting pose on map
     sx: 0.0

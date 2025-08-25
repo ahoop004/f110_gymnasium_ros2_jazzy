@@ -37,6 +37,8 @@ def generate_launch_description():
     config_dict = yaml.safe_load(open(config, 'r'))
     has_opp = config_dict['bridge']['ros__parameters']['num_agent'] > 1
     teleop = config_dict['bridge']['ros__parameters']['kb_teleop']
+    
+    model = config_dict['bridge']['ros__parameters']['model']
 
     bridge_node = Node(
         package='f1tenth_gym_ros',
@@ -90,6 +92,15 @@ def generate_launch_description():
       
         parameters=[{'use_sim_time': True}]
     )
+    ego_rl_controller = Node(
+        package='rl_car_controller',
+        executable='rl_agent_node',
+        namespace='ego_racecar',
+        name='rl_car_controller',
+        parameters=[{'use_sim_time': True}]
+    )
+    
+    
 
     # opp gap follow node (optional)
     if has_opp:
@@ -114,6 +125,7 @@ def generate_launch_description():
     ld.add_action(map_server_node)
     ld.add_action(ego_robot_publisher)
     ld.add_action(ego_gap_follow)
+    # ld.add_action(ego_rl_controller)
     if has_opp:
         ld.add_action(opp_robot_publisher)
         ld.add_action(opp_gap_follow)
