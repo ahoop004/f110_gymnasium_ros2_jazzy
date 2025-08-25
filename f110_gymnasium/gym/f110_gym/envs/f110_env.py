@@ -214,7 +214,7 @@ class F110Env(gym.Env):
         self.action_space = spaces.Tuple((single_action_space, single_action_space))
         
         
-        scan_space = spaces.Box(low=0.0, high=10.0, shape=(1080,), dtype=np.float32)
+        scan_space = spaces.Box(low=0.0, high=30.0, shape=(1080,), dtype=np.float32)
         pose_space = spaces.Box(
             low=np.array([x_min, y_min, -np.pi], dtype=np.float32),
             high=np.array([x_max, y_max, np.pi], dtype=np.float32),
@@ -228,7 +228,7 @@ class F110Env(gym.Env):
         
         spaces_dict_obs = spaces.Dict({
             'ego_idx': spaces.Discrete(self.num_agents),
-            'scans': spaces.Box(low=0.0, high=10.0, shape=(self.num_agents, 1080), dtype=np.float32),
+            'scans': spaces.Box(low=0.0, high=30.0, shape=(self.num_agents, 1080), dtype=np.float32),
             'poses_x': spaces.Box(low=x_min, high=x_max, shape=(self.num_agents,), dtype=np.float32),
             'poses_y': spaces.Box(low=y_min, high=y_max, shape=(self.num_agents,), dtype=np.float32),
             'poses_theta': spaces.Box(low=-np.pi, high=np.pi, shape=(self.num_agents,), dtype=np.float32),
