@@ -32,6 +32,8 @@ from observation import observation_wrapper
 from actions import ActionMapper
 from agents import TD3Agent, TD3Config
 from replay_buffer import PrioritizedReplayBuffer
+from rewards import adversarial_block_reward
+from collections import deque
 
 # --- Optional opponent policy (gap follow) ---
 try:
@@ -218,6 +220,12 @@ def main(args: Optional[argparse.Namespace] = None):
         truncated = False
         
         # env.render()
+        
+        opp_stall_patience = int(cfg["reward"].get("opp_stall_patience", 12))  # ~0.12s if dt=0.01
+        opp_stall_eps      = float(cfg["reward"].get("opp_stall_speed_eps", 0.25))
+        opp_bonus          = float(cfg["reward"].get("opp_stall_bonus", 5.0))
+        opp_stall_win      = deque(maxlen=opp_stall_patience)
+        gave_opp_bonus     = False
 
         while not done and steps < max_episode_steps:
             # Build vector obs and diagnostics
@@ -248,10 +256,19 @@ def main(args: Optional[argparse.Namespace] = None):
 
             # For now: use env reward (per-step constant). We'll replace with rewards.py later.
             # If env returns scalar timestep reward, it's same for all agents; take it as-is.
-            r = float(env_rew)
+            next_obs_vec, next_extras = obs_w.build(next_obs_dict, last_action=ego_action_env, eval_mode=eval_mode)
+            # r = float(env_rew)
+            r = adversarial_block_reward(
+                obs_dict=obs_dict_local,
+                next_obs_dict=next_obs_dict,
+                info=info,
+                extras=next_extras,              # use extras aligned with next state
+                done=(terminated or truncated),
+                terminated=terminated,
+                truncated=truncated,
+)
 
             # Store transition (normalized action)
-            next_obs_vec, _ = obs_w.build(next_obs_dict, last_action=ego_action_env, eval_mode=eval_mode)
             if not eval_mode:
                 buffer.add(obs_vec_local, a_norm, r, next_obs_vec, done)
 
