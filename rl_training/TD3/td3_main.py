@@ -204,11 +204,11 @@ def main(args: Optional[argparse.Namespace] = None):
     def run_episode(eval_mode: bool = False) -> Tuple[float, int]:
         nonlocal global_steps, episode
         obs_dict_local = obs_dict  # start from outer reset if called at the beginning
-        if episode == 0 or eval_mode:
+        # if episode == 0 or eval_mode:
             # fresh reset for eval and first train episode
-            obs_dict_local, _ = env.reset(options=start_poses)
-            obs_w.reset(obs_dict_local)
-            mapper.reset()
+        obs_dict_local, _ = env.reset(options=start_poses)
+        obs_w.reset(obs_dict_local)
+        mapper.reset()
 
         total_r = 0.0
         steps = 0
