@@ -45,8 +45,8 @@ def soft_update_(net: nn.Module, target: nn.Module, tau: float) -> None:
 @dataclass
 class TD3Config:
     # model
-    actor_hidden: Tuple[int, ...] = (256, 256)
-    critic_hidden: Tuple[int, ...] = (256, 256)
+    actor_hidden: Tuple[int, ...] = (128, 128)
+    critic_hidden: Tuple[int, ...] = (128, 128)
     # rl
     gamma: float = 0.99
     tau: float = 0.005
@@ -84,9 +84,10 @@ class TD3Agent:
         obs_dim: int,
         act_dim: int,
         cfg: Optional[TD3Config] = None,
-        device: Optional[torch.device] = None,
+        device: Optional[torch.device] = "cpu",
     ) -> None:
-        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device 
+        # self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.obs_dim = int(obs_dim)
         self.act_dim = int(act_dim)
         self.cfg = cfg or TD3Config()

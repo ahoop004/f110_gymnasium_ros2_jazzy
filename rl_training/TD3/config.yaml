@@ -64,6 +64,7 @@ env:
   max_episode_steps: 5000
   seed: 42
 
+
   # Start poses for [ego, opp] as [x, y, yaw] in meters/radians.
   # Replace with your track-specific values.
   start_poses:
@@ -186,7 +187,7 @@ train:
   eval_every_steps: 10000
   save_every_steps: 50000
   seed: 42
-  render: false
+  render: true
 
 paths:
   run_name: "td3_limo_base"

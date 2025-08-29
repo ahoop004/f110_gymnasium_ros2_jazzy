@@ -93,13 +93,14 @@ def to_np(x) -> np.ndarray:
 
 
 def main(args: Optional[argparse.Namespace] = None):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, required=True, help="Path to config.yaml")
-    parser.add_argument("--resume", type=str, default="", help="Path to checkpoint (.pt) to resume")
-    cli = parser.parse_args(None if args is None else [])
+    cnf_path = '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/TD3/config.yaml'
+    sv_pth = '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/TD3/models/model.pt'
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("--config", type=str, required=True, help="Path to config.yaml", default=cnf_path)
+    # parser.add_argument("--resume", type=str, default=sv_pth, help="Path to checkpoint (.pt) to resume")
+    # cli = parser.parse_args(None if args is None else [])
 
-    # --- Load config
-    with open(cli.config, "r") as f:
+    with open(cnf_path, "r") as f:
         cfg = yaml.safe_load(f)
 
     # --- Dirs & seed
@@ -146,8 +147,8 @@ def main(args: Optional[argparse.Namespace] = None):
 
     # --- Agent & PER
     td3_cfg = TD3Config(
-        actor_hidden=tuple(cfg["td3"].get("actor_hidden", (256, 256))),
-        critic_hidden=tuple(cfg["td3"].get("critic_hidden", (256, 256))),
+        actor_hidden=tuple(cfg["td3"].get("actor_hidden", (128,128))),
+        critic_hidden=tuple(cfg["td3"].get("critic_hidden", (128,128))),
         gamma=cfg["td3"]["gamma"],
         tau=cfg["td3"]["tau"],
         actor_lr=cfg["td3"]["actor_lr"],
@@ -175,13 +176,14 @@ def main(args: Optional[argparse.Namespace] = None):
 
     # --- Resume checkpoint (optional)
     ckpt_dir = run_dir / "checkpoints"
-    if cli.resume and os.path.isfile(cli.resume):
-        agent.load(cli.resume)
+    
+    if sv_pth and os.path.isfile(sv_pth):
+        agent.load(sv_pth)
         # try loading obs wrapper state
-        ow_state = Path(cli.resume).with_suffix(".obs.pt")
+        ow_state = Path(sv_pth).with_suffix(".obs.pt")
         if ow_state.exists():
             load_obs_wrapper_state(obs_w, ow_state)
-        print(f"[Resume] Loaded checkpoint: {cli.resume}")
+        print(f"[Resume] Loaded checkpoint: {sv_pth}")
 
     # --- Training params
     total_steps = int(cfg["train"]["total_steps"])
@@ -191,7 +193,7 @@ def main(args: Optional[argparse.Namespace] = None):
     updates_per_step = int(cfg["train"]["updates_per_step"])
     eval_every = int(cfg["train"]["eval_every_steps"])
     save_every = int(cfg["train"]["save_every_steps"])
-    render_flag = bool(cfg["train"].get("render", False))
+    render_flag = bool(cfg["train"].get("render", True))
 
     # --- Loop state
     global_steps = 0
@@ -214,6 +216,8 @@ def main(args: Optional[argparse.Namespace] = None):
         done = False
         terminated = False
         truncated = False
+        
+        # env.render()
 
         while not done and steps < max_episode_steps:
             # Build vector obs and diagnostics
@@ -263,8 +267,8 @@ def main(args: Optional[argparse.Namespace] = None):
             global_steps += (0 if eval_mode else 1)
             last_action_env = ego_action_env
             obs_dict_local = next_obs_dict
-
-            if render_flag and hasattr(env, "render"):
+            env.render()
+            if render_flag:
                 try:
                     env.render()
                 except Exception:
