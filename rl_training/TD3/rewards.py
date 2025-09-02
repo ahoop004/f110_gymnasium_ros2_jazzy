@@ -20,9 +20,9 @@ class RewardWrapper:
     def __init__(
         self,
         alive_reward: float = 0.01,          # per-step time cost (will be subtracted)
-        crash_penalty: float = -10.0,        # negative value
-        k_progress: float = 0.01,            # scales forward progress (meters per step)
-        # NEW:
+        crash_penalty: float = -1.0,        # negative value
+        k_progress: float = 0.1,            # scales forward progress (meters per step)
+
         k_smooth: float = 0.01,              # weight for smoothness penalty (set 0.0 to disable)
         smooth_vel_weight: float = 0.25,     # relative weight for velocity change vs steering change
         k_dir: float = 0.01,                 # weight for directional alignment (set 0.0 to disable)

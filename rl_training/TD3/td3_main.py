@@ -87,7 +87,7 @@ def main(args: Optional[argparse.Namespace] = None):
     act_wrap = ActionWrapper( float(action_low[0]), float(action_high[0]), float(action_low[1]), float(action_high[1]))
     
     
-    reward_w = RewardWrapper(alive_reward=1e-4,crash_penalty=-10.0,k_progress=0.01)
+    reward_w = RewardWrapper()
 
 
     env = gym.make(
