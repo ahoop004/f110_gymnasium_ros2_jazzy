@@ -30,7 +30,7 @@ import yaml
 import gymnasium as gym
 
 from obs import ObservationWrapper
-from actions import ActionMapper
+from act import ActionWrapper
 from agents import TD3Agent, TD3Config
 from replay_buffer import PrioritizedReplayBuffer
 from rewards import adversarial_block_reward
@@ -52,17 +52,6 @@ def set_seed(seed: int) -> None:
     torch.cuda.manual_seed_all(seed)
 
 
-def make_env(cfg: dict):
-    e = gym.make(
-        cfg["env"]["id"],
-        render_mode=cfg["env"].get("render_mode", None),
-        map_dir=cfg["env"]["map_dir"],
-        map=cfg["env"]["map"],
-        map_ext=cfg["env"]["map_ext"],
-        num_agents=int(cfg["env"]["num_agents"]),
-    )
-    return e
-
 
 def ensure_dirs(paths: dict) -> Path:
     run_name = paths.get("run_name", f"td3_run_{int(time.time())}")
@@ -77,11 +66,6 @@ def ensure_dirs(paths: dict) -> Path:
 def save_yaml(d: dict, path: Path) -> None:
     with open(path, "w") as f:
         yaml.safe_dump(d, f, sort_keys=False)
-
-
-
-
-
 
 
 def main(args: Optional[argparse.Namespace] = None):
@@ -103,9 +87,20 @@ def main(args: Optional[argparse.Namespace] = None):
     lidar_max = cfg["obs"]["lidar_max"]
     obs_w = ObservationWrapper(lidar_max,map_bounds)
 
-    # --- Env
-    env = make_env(cfg)
+
+    env = gym.make(
+                cfg["env"]["id"],
+                render_mode=cfg["env"].get("render_mode", None),
+                map_dir=cfg["env"]["map_dir"],
+                map=cfg["env"]["map"],
+                map_ext=cfg["env"]["map_ext"],
+                num_agents=int(cfg["env"]["num_agents"]),
+            )
+    
+    
     max_episode_steps = int(cfg["env"].get("max_episode_steps", 2000))
+    
+    
     start_poses = cfg["env"].get("start_poses", None)
     if start_poses is not None:
         start_poses = np.array(start_poses, dtype=np.float32)
@@ -125,8 +120,8 @@ def main(args: Optional[argparse.Namespace] = None):
     # --- Observation wrapper
 
     # --- Action mapper (noise handled in the agent)
-    mapper = ActionMapper(cfg, dt=dt, steer_bounds=steer_bounds, speed_bounds=speed_bounds)
-    mapper.reset()  # seed last action
+    act_wrap = ActionWrapper( float(action_low[0]), float(action_high[0]), float(action_low[1]), float(action_high[1]))
+    
 
     # --- Dimensions
     # Reset env to get first obs and size things
@@ -185,12 +180,9 @@ def main(args: Optional[argparse.Namespace] = None):
     # Helper to run one episode (train or eval)
     def run_episode(eval_mode: bool = False) -> Tuple[float, int]:
         nonlocal global_steps, episode
-        obs_dict_local = obs_dict  # start from outer reset if called at the beginning
-        # if episode == 0 or eval_mode:
-            # fresh reset for eval and first train episode
-        obs_dict_local, _ = env.reset(options=start_poses)
-        obs_w.reset(obs_dict_local)
-        mapper.reset()
+
+
+
 
         total_r = 0.0
         steps = 0
@@ -207,18 +199,20 @@ def main(args: Optional[argparse.Namespace] = None):
         opp_stall_win      = deque(maxlen=opp_stall_patience)
         gave_opp_bonus     = False
 
+        obs_dict, _ = env.reset(options=start_poses)
+        
         while not done and steps < max_episode_steps:
             # Build vector obs and diagnostics
-            obs_vec_local, extras_local = obs_w.build(obs_dict_local, last_action=last_action_env, eval_mode=eval_mode)
+            obs_vec_local = obs_w.build(obs_dict)
 
             # --- Ego action (normalized)
             if (not eval_mode) and (global_steps < warmup_steps):
-                a_norm = np.random.uniform(-1.0, 1.0, size=act_dim).astype(np.float32)
+                act_norm = np.random.uniform(-1.0, 1.0, size=act_dim).astype(np.float32)
             else:
-                a_norm = agent.select_action(obs_vec_local, eval_mode=eval_mode)
+                act_norm = agent.select_action(obs_vec_local, eval_mode=eval_mode)
 
             # Map to env units (+ governors, rate limits)
-            ego_action_env = mapper.map(a_norm, extras=extras_local, training=not eval_mode, eval_mode=eval_mode)
+            ego_action = act_wrap.build(act_norm)
 
             # Opponent action from current obs (opp index assumed 1)
             try:
@@ -228,7 +222,7 @@ def main(args: Optional[argparse.Namespace] = None):
                 opp_action_env = np.array([0.0, action_low[1]], dtype=np.float32)
 
             # Stack actions -> shape (2,2) for the env
-            actions_env = np.stack([ego_action_env, opp_action_env], axis=0).astype(np.float32)
+            actions_env = np.stack([ego_action, opp_action_env], axis=0).astype(np.float32)
 
             # Step environment
             next_obs_dict, env_rew, terminated, truncated, info = env.step(actions_env)
@@ -236,7 +230,7 @@ def main(args: Optional[argparse.Namespace] = None):
 
             # For now: use env reward (per-step constant). We'll replace with rewards.py later.
             # If env returns scalar timestep reward, it's same for all agents; take it as-is.
-            next_obs_vec, next_extras = obs_w.build(next_obs_dict, last_action=ego_action_env, eval_mode=eval_mode)
+            next_obs_vec = obs_w.build(next_obs_dict)
             # r = float(env_rew)
             r = adversarial_block_reward(
                 obs_dict=obs_dict_local,
@@ -250,7 +244,7 @@ def main(args: Optional[argparse.Namespace] = None):
 
             # Store transition (normalized action)
             if not eval_mode:
-                buffer.add(obs_vec_local, a_norm, r, next_obs_vec, done)
+                buffer.add(obs_vec_local, act_norm, r, next_obs_vec, done)
 
                 # Learn (after update_after)
                 if global_steps >= update_after:
@@ -262,7 +256,7 @@ def main(args: Optional[argparse.Namespace] = None):
             total_r += r
             steps += 1
             global_steps += (0 if eval_mode else 1)
-            last_action_env = ego_action_env
+            last_action_env = ego_action
             obs_dict_local = next_obs_dict
             # env.render()
             # if render_flag:

@@ -73,7 +73,7 @@ env:
 
   # Action bounds used by your env; keep speed forward-only to start.
   action_low:  [-0.4189, 0.0]        # [steer_min(rad), speed_min(m/s)]
-  action_high: [ 0.4189, 3.0]        # [steer_max(rad), speed_max(m/s)]
+  action_high: [ 0.4189, 5.0]        # [steer_max(rad), speed_max(m/s)]
 
   # LiDAR geometry used by env/bridge
   lidar:
