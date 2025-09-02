@@ -8,7 +8,7 @@ import random
 import yaml
 from DQN.agent import PERAgent 
 # Import simplified gap-follow policy
-from utils.gap_follow import gap_follow_action
+from rl_training.TD3.gap_follow import gap_follow_action
 
 with open('/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/rl_conf.yaml', 'r') as file:
     config = yaml.safe_load(file)

@@ -1,134 +1,75 @@
-import numpy as np
+# reward_wrapper.py
+import math
 
-def _safe_get(d, key, default=0.0):
-    try:
-        v = d.get(key, default)
-        if v is None:
-            return default
-        return float(v)
-    except Exception:
-        return default
-
-def _q10_forward_clearance(extras):
+class RewardWrapper:
     """
-    Your observation_wrapper said it computes clearance summaries from full LiDAR.
-    Expect something like extras["clearance_forward_q10"] (rename if needed).
+    Simple reward wrapper.
+    Returns a small alive reward each step until crash,
+    otherwise returns a crash penalty.
     """
-    return float(extras.get("clearance_forward_q10", 10.0))
 
-def _ego_safety_terms(extras, w_wall=1.0, w_yaw=0.2):
-    # Smaller forward clearance => bigger penalty
-    cf_q10 = _q10_forward_clearance(extras)              # meters, e.g., 0..30
-    yaw_rate = abs(float(extras.get("ego_yaw_rate", 0))) # rad/s
-    # Normalize a bit (tune 10.0 and 2.0 to your map/vehicle)
-    wall_pen = -w_wall * np.exp(-cf_q10 / 6.0)
-    yaw_pen  = -w_yaw  * min(yaw_rate / 2.0, 1.5)
-    return wall_pen + yaw_pen
+    def __init__(self, alive_reward: float = 0.01, crash_penalty: float = -10.0, k_progress: float = 0.01):
+        self.alive_reward = float(alive_reward)
+        self.crash_penalty = float(crash_penalty)
+        self.k_progress = float(k_progress)
 
-def _rel_features(extras):
-    """
-    Pull relative scalars the wrapper said it exposes:
-      dist, sin(bearing), cos(bearing),
-      rel_speed_los, sin(dtheta), cos(dtheta)
-    Return with safe defaults.
-    """
-    dist = float(extras.get("opp_dist", 999.0))
-    sb   = float(extras.get("opp_bearing_sin", 0.0))
-    cb   = float(extras.get("opp_bearing_cos", -1.0))  # -1 => behind by default
-    rs   = float(extras.get("opp_rel_speed_los", 0.0))
-    sd   = float(extras.get("opp_dtheta_sin", 0.0))
-    cd   = float(extras.get("opp_dtheta_cos", 1.0))
-    return dist, sb, cb, rs, sd, cd
+        # Internal state for progress
+        self._prev_pose = None
+        
+    def reset(self, observations: dict) -> None:
+        """Initialize previous pose from the current observations (episode start)."""
+        ego = int(observations["ego_idx"])
+        x = float(observations["poses_x"][ego])
+        y = float(observations["poses_y"][ego])
+        th = float(observations["poses_theta"][ego])
+        self._prev_pose = (x, y, th)
 
-def _is_opp_crash(info, opp_idx=1):
-    """
-    Try to read common flags; fall back to None.
-    Customize to your env's info schema.
-    """
-    # Examples that often exist in F1TENTH-style envs:
-    crashed_agents = info.get("crashed_agents") or info.get("crashed") or {}
-    if isinstance(crashed_agents, dict):
-        return bool(crashed_agents.get(opp_idx, False))
-    if isinstance(crashed_agents, (list, tuple)):
-        try:
-            return bool(crashed_agents[opp_idx])
-        except Exception:
-            pass
-    # Vehicle-to-wall/vehicle flags:
-    if bool(info.get("opp_wall_collision", False)) or bool(info.get("opp_vehicle_collision", False)):
-        return True
-    return False
+    def compute(self, observations: dict) -> float:
+        """
+        Compute the step reward.
+        Expects: 'ego_idx', 'poses_x', 'poses_y', 'poses_theta', 'collisions'
+        """
+        ego = int(observations["ego_idx"])
+        x = float(observations["poses_x"][ego])
+        y = float(observations["poses_y"][ego])
+        th = float(observations["poses_theta"][ego])
+        crashed = bool(observations["collisions"][ego])
 
-def _infer_opp_crash_fallback(next_obs_dict, eps=0.2):
-    """
-    Heuristic if env doesn't mark collisions:
-    opponent nearly stopped and near map boundary tends to coincide with crash/timeout.
-    With only what's in obs_dict, we can check opponent speed magnitude.
-    """
-    try:
-        vx = float(next_obs_dict["linear_vels_x"][1])
-        vy = float(next_obs_dict["linear_vels_y"][1])
-        speed = (vx*vx + vy*vy) ** 0.5
-        return speed < eps
-    except Exception:
-        return False
+        total = 0.0
+        total -= self._alive()
+        total += self._crash(crashed)
 
-def adversarial_block_reward(
-    obs_dict,
-    next_obs_dict,
-    info,
-    extras,
-    done,
-    terminated,
-    truncated,
-    *,
-    w_opp_crash= +5.0,
-    w_block_front= +1.0,
-    w_close= +0.6,
-    w_align= +0.4,
-    w_press= +0.8,
-    w_safe= +0.8,
-    ego_collision_pen=-15.0,
-    min_sep=0.8,
-    max_effect_dist=6.0
-):
-    """
-    Composite reward to cause opponent to crash while keeping ego safe.
-    Returns: scalar float
-    """
-    r = 0.0
+        if self.k_progress > 0.0:
+            total += self.k_progress * self._progress(x, y, th)
 
-    # 1) Opponent crash bonus
-    # CHANGE: pay as soon as detected; do NOT wait for episode end.
-    opp_crash = _is_opp_crash(info, opp_idx=1)
-    if not opp_crash:
-        opp_crash = _infer_opp_crash_fallback(next_obs_dict)  # heuristic if env doesn't flag
-    if opp_crash:
-        r += w_opp_crash
+        # update state for next step
+        self._prev_pose = (x, y, th)
+        return float(total)
 
-    # 2) Blocking geometry
-    dist, sb, cb, rs, sd, cd = _rel_features(extras)
-    if dist < max_effect_dist:
-        ahead_term = -cb  # positive when opponent is behind us (we're ahead)
-        closeness = np.clip((max_effect_dist - dist) / max_effect_dist, 0.0, 1.0)
-        if dist < min_sep:
-            closeness *= 0.25
+   
 
-        r += w_block_front * ahead_term
-        r += w_close       * closeness
-        r += w_align       * max(cd, 0.0) * closeness
+    def _alive(self) -> float:
+        return self.alive_reward
 
-        lateral_pressure = np.clip(abs(sb), 0.0, 1.0) * ahead_term * closeness
-        r += w_press * lateral_pressure
+    def _crash(self, crashed: bool) -> float:
+        if crashed:
+            return self.crash_penalty
+        return 0.0
 
-    # 3) Ego safety & collision penalties
-    r += w_safe * _ego_safety_terms(extras, w_wall=1.0, w_yaw=0.2)
+    def _progress(self, x: float, y: float, theta_prev: float) -> float:
+        """
+        Forward progress along previous heading direction.
+        Returns 0.0 on the first call (no previous pose).
+        """
+        if self._prev_pose is None:
+            return 0.0
 
-    ego_crash = bool(info.get("ego_wall_collision", False) or info.get("ego_vehicle_collision", False))
-    if ego_crash:
-        r += ego_collision_pen
-
-    # Robustness: ensure finite scalar
-    if not np.isfinite(r):
-        r = float(0.0)
-    return float(r)
+        x_prev, y_prev, th_prev = self._prev_pose
+        # displacement since last step
+        dx = x - x_prev
+        dy = y - y_prev
+        # unit heading from previous step
+        ux = math.cos(th_prev)
+        uy = math.sin(th_prev)
+        ds = dx * ux + dy * uy  # projection onto previous heading
+        return ds if ds > 0.0 else 0.0

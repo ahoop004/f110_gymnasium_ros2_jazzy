@@ -1,6 +1,6 @@
 import numpy as np
 
-def preprocess_lidar(ranges, max_distance=3.0, window_size=5):
+def preprocess_lidar(ranges, max_distance=30.0, window_size=5):
     processed = []
     N = len(ranges)
     half_window = window_size // 2
@@ -40,7 +40,7 @@ def find_max_gap(processed_lidar, threshold=0.5):
 def find_best_point(gap):
     return (gap[0] + gap[1]) // 2
 
-def gap_follow_action(scan_ranges, angle_min=-np.pi/2, angle_increment=np.pi/1080):
+def gap_follow_action(scan_ranges, angle_min=-4.7/2, angle_increment=4.7/1080):
     proc_lidar = preprocess_lidar(scan_ranges)
     proc_lidar = create_bubble(proc_lidar)
     gap = find_max_gap(proc_lidar)
@@ -49,10 +49,10 @@ def gap_follow_action(scan_ranges, angle_min=-np.pi/2, angle_increment=np.pi/108
     steering_angle = angle_min + best_point * angle_increment
 
     if abs(steering_angle) < np.radians(10):
-        speed = 1.5
+        speed = 3.5
     elif abs(steering_angle) < np.radians(20):
-        speed = 1.0
+        speed = 3.0
     else:
-        speed = 0.5
+        speed = 2.5
 
     return np.array([steering_angle, speed])

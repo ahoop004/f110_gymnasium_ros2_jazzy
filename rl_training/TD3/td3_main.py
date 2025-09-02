@@ -33,16 +33,11 @@ from obs import ObservationWrapper
 from act import ActionWrapper
 from agents import TD3Agent, TD3Config
 from replay_buffer import PrioritizedReplayBuffer
-from rewards import adversarial_block_reward
+from rewards import RewardWrapper
 from map_utils import get_map_bounds
 
-# --- Optional opponent policy (gap follow) ---
-try:
-    from utils.gap_follow import gap_follow_action as gap_follow
-except Exception:
-    # Fallback: drive slowly forward, small steering to center (no-op if no scan)
-    def gap_follow(scan_1d: np.ndarray) -> np.ndarray:
-        return np.array([0.0, 1.0], dtype=np.float32)  # [steer_rad, speed_mps]
+from gap_follow import gap_follow_action
+
 
 
 def set_seed(seed: int) -> None:
@@ -86,6 +81,13 @@ def main(args: Optional[argparse.Namespace] = None):
     map_bounds = get_map_bounds(cfg['env'].get('map_path')+'.yaml')
     lidar_max = cfg["obs"]["lidar_max"]
     obs_w = ObservationWrapper(lidar_max,map_bounds)
+    
+    action_low = np.array(cfg["env"]["action_low"], dtype=np.float32)
+    action_high = np.array(cfg["env"]["action_high"], dtype=np.float32)
+    act_wrap = ActionWrapper( float(action_low[0]), float(action_high[0]), float(action_low[1]), float(action_high[1]))
+    
+    
+    reward_w = RewardWrapper(alive_reward=1e-4,crash_penalty=-10.0,k_progress=0.01)
 
 
     env = gym.make(
@@ -105,26 +107,7 @@ def main(args: Optional[argparse.Namespace] = None):
     if start_poses is not None:
         start_poses = np.array(start_poses, dtype=np.float32)
 
-    # Try to get dt from env; default to 0.01
-    try:
-        dt = float(getattr(env.unwrapped, "timestep", 0.01))
-    except Exception:
-        dt = 0.01
 
-    # Action bounds (env units)
-    action_low = np.array(cfg["env"]["action_low"], dtype=np.float32)
-    action_high = np.array(cfg["env"]["action_high"], dtype=np.float32)
-    steer_bounds = (float(action_low[0]), float(action_high[0]))
-    speed_bounds = (float(action_low[1]), float(action_high[1]))
-
-    # --- Observation wrapper
-
-    # --- Action mapper (noise handled in the agent)
-    act_wrap = ActionWrapper( float(action_low[0]), float(action_high[0]), float(action_low[1]), float(action_high[1]))
-    
-
-    # --- Dimensions
-    # Reset env to get first obs and size things
     obs_dict, info = env.reset(options=start_poses)
 
     obs_vec= obs_w.build(obs_dict)
@@ -161,8 +144,6 @@ def main(args: Optional[argparse.Namespace] = None):
     )
 
 
-
-    # --- Training params
     total_steps = int(cfg["train"]["total_steps"])
     warmup_steps = int(cfg["train"]["warmup_steps"])
     update_after = int(cfg["train"]["update_after"])
@@ -181,28 +162,16 @@ def main(args: Optional[argparse.Namespace] = None):
     def run_episode(eval_mode: bool = False) -> Tuple[float, int]:
         nonlocal global_steps, episode
 
-
-
-
         total_r = 0.0
         steps = 0
-        last_action_env = None
         done = False
         terminated = False
         truncated = False
         
-        # env.render()
-        
-        opp_stall_patience = int(cfg["reward"].get("opp_stall_patience", 12))  # ~0.12s if dt=0.01
-        opp_stall_eps      = float(cfg["reward"].get("opp_stall_speed_eps", 0.25))
-        opp_bonus          = float(cfg["reward"].get("opp_stall_bonus", 5.0))
-        opp_stall_win      = deque(maxlen=opp_stall_patience)
-        gave_opp_bonus     = False
-
         obs_dict, _ = env.reset(options=start_poses)
         
         while not done and steps < max_episode_steps:
-            # Build vector obs and diagnostics
+
             obs_vec_local = obs_w.build(obs_dict)
 
             # --- Ego action (normalized)
@@ -211,38 +180,20 @@ def main(args: Optional[argparse.Namespace] = None):
             else:
                 act_norm = agent.select_action(obs_vec_local, eval_mode=eval_mode)
 
-            # Map to env units (+ governors, rate limits)
             ego_action = act_wrap.build(act_norm)
 
-            # Opponent action from current obs (opp index assumed 1)
-            try:
-                opp_scan = np.asarray(obs_dict_local["scans"][1], dtype=np.float32)
-                opp_action_env = gap_follow(opp_scan).astype(np.float32)
-            except Exception:
-                opp_action_env = np.array([0.0, action_low[1]], dtype=np.float32)
+            opp_scan = np.asarray(obs_dict["scans"][1], dtype=np.float32)
+            opp_action_env = gap_follow_action(opp_scan).astype(np.float32)
 
-            # Stack actions -> shape (2,2) for the env
             actions_env = np.stack([ego_action, opp_action_env], axis=0).astype(np.float32)
 
-            # Step environment
             next_obs_dict, env_rew, terminated, truncated, info = env.step(actions_env)
             done = bool(terminated or truncated)
 
-            # For now: use env reward (per-step constant). We'll replace with rewards.py later.
-            # If env returns scalar timestep reward, it's same for all agents; take it as-is.
             next_obs_vec = obs_w.build(next_obs_dict)
-            # r = float(env_rew)
-            r = adversarial_block_reward(
-                obs_dict=obs_dict_local,
-                next_obs_dict=next_obs_dict,
-                info=info,
-                extras=next_extras,              # use extras aligned with next state
-                done=(terminated or truncated),
-                terminated=terminated,
-                truncated=truncated,
-)
 
-            # Store transition (normalized action)
+            r = reward_w.compute(next_obs_dict)
+
             if not eval_mode:
                 buffer.add(obs_vec_local, act_norm, r, next_obs_vec, done)
 
@@ -256,14 +207,8 @@ def main(args: Optional[argparse.Namespace] = None):
             total_r += r
             steps += 1
             global_steps += (0 if eval_mode else 1)
-            last_action_env = ego_action
-            obs_dict_local = next_obs_dict
+            obs_dict = next_obs_dict
             # env.render()
-            # if render_flag:
-            #     try:
-            #         env.render()
-            #     except Exception:
-            #         pass
 
             if done:
                 break
@@ -278,9 +223,9 @@ def main(args: Optional[argparse.Namespace] = None):
 
         if (global_steps // max(1, eval_every)) != ((global_steps - ep_steps) // max(1, eval_every)):
             # Just crossed an eval boundary: run one eval episode
-            obs_w.set_eval(True)
+            
             eval_ret, eval_steps = run_episode(eval_mode=True)
-            obs_w.set_eval(False)
+            
 
             # Save best
             if eval_ret > best_eval_return:
