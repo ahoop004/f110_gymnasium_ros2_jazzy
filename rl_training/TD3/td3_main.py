@@ -22,18 +22,19 @@ import argparse
 import random
 from pathlib import Path
 from typing import Optional, Tuple
+from collections import deque
 
 import numpy as np
 import torch
 import yaml
 import gymnasium as gym
 
-from observation import observation_wrapper
+from obs import ObservationWrapper
 from actions import ActionMapper
 from agents import TD3Agent, TD3Config
 from replay_buffer import PrioritizedReplayBuffer
 from rewards import adversarial_block_reward
-from collections import deque
+from map_utils import get_map_bounds
 
 # --- Optional opponent policy (gap follow) ---
 try:
@@ -78,29 +79,15 @@ def save_yaml(d: dict, path: Path) -> None:
         yaml.safe_dump(d, f, sort_keys=False)
 
 
-def save_obs_wrapper_state(obs_w: observation_wrapper, path: Path) -> None:
-    state = obs_w.get_state()
-    torch.save(state, path)
 
 
-def load_obs_wrapper_state(obs_w: observation_wrapper, path: Path) -> None:
-    state = torch.load(path, map_location="cpu")
-    obs_w.set_state(state)
 
-
-def to_np(x) -> np.ndarray:
-    if isinstance(x, np.ndarray):
-        return x
-    return np.asarray(x, dtype=np.float32)
 
 
 def main(args: Optional[argparse.Namespace] = None):
     cnf_path = '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/TD3/config.yaml'
     sv_pth = '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/TD3/models/model.pt'
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument("--config", type=str, required=True, help="Path to config.yaml", default=cnf_path)
-    # parser.add_argument("--resume", type=str, default=sv_pth, help="Path to checkpoint (.pt) to resume")
-    # cli = parser.parse_args(None if args is None else [])
+
 
     with open(cnf_path, "r") as f:
         cfg = yaml.safe_load(f)
@@ -110,6 +97,11 @@ def main(args: Optional[argparse.Namespace] = None):
     save_yaml(cfg, run_dir / "config.yaml")
     seed = int(cfg["train"].get("seed", 42))
     set_seed(seed)
+    
+    
+    map_bounds = get_map_bounds(cfg['env'].get('map_path')+'.yaml')
+    lidar_max = cfg["obs"]["lidar_max"]
+    obs_w = ObservationWrapper(lidar_max,map_bounds)
 
     # --- Env
     env = make_env(cfg)
@@ -131,9 +123,6 @@ def main(args: Optional[argparse.Namespace] = None):
     speed_bounds = (float(action_low[1]), float(action_high[1]))
 
     # --- Observation wrapper
-    obs_w = observation_wrapper(
-        cfg, lidar_beams=cfg["env"]["lidar"]["beams"], fov=cfg["env"]["lidar"]["fov"], progress=None
-    )
 
     # --- Action mapper (noise handled in the agent)
     mapper = ActionMapper(cfg, dt=dt, steer_bounds=steer_bounds, speed_bounds=speed_bounds)
@@ -142,9 +131,9 @@ def main(args: Optional[argparse.Namespace] = None):
     # --- Dimensions
     # Reset env to get first obs and size things
     obs_dict, info = env.reset(options=start_poses)
-    obs_w.reset(obs_dict)
-    obs_vec, extras = obs_w.build(obs_dict, last_action=None, eval_mode=False)
-    obs_dim = int(obs_w.obs_dim())
+
+    obs_vec= obs_w.build(obs_dict)
+    obs_dim = obs_vec.size
     act_dim = int(len(action_low))  # expect 2
 
     # --- Agent & PER
@@ -176,16 +165,7 @@ def main(args: Optional[argparse.Namespace] = None):
         seed=seed,
     )
 
-    # --- Resume checkpoint (optional)
-    ckpt_dir = run_dir / "checkpoints"
-    
-    if sv_pth and os.path.isfile(sv_pth):
-        agent.load(sv_pth)
-        # try loading obs wrapper state
-        ow_state = Path(sv_pth).with_suffix(".obs.pt")
-        if ow_state.exists():
-            load_obs_wrapper_state(obs_w, ow_state)
-        print(f"[Resume] Loaded checkpoint: {sv_pth}")
+
 
     # --- Training params
     total_steps = int(cfg["train"]["total_steps"])
@@ -313,7 +293,6 @@ def main(args: Optional[argparse.Namespace] = None):
                 best_eval_return = eval_ret
                 best_path = run_dir / "checkpoints" / "best.pt"
                 agent.save(str(best_path))
-                save_obs_wrapper_state(obs_w, best_path.with_suffix(".obs.pt"))
                 print(f"[SAVE] New best eval return {best_eval_return:.3f}  -> {best_path.name}")
 
             print(f"[EVAL] ret={eval_ret:.3f} steps={eval_steps} best={best_eval_return:.3f}")
@@ -322,7 +301,6 @@ def main(args: Optional[argparse.Namespace] = None):
         if save_every > 0 and (global_steps % save_every) < ep_steps:
             path = run_dir / "checkpoints" / f"step_{global_steps}.pt"
             agent.save(str(path))
-            save_obs_wrapper_state(obs_w, path.with_suffix(".obs.pt"))
             print(f"[SAVE] checkpoint @ step {global_steps}")
 
         # Console log
@@ -331,7 +309,6 @@ def main(args: Optional[argparse.Namespace] = None):
     # --- Final save
     final_path = run_dir / "checkpoints" / "final.pt"
     agent.save(str(final_path))
-    save_obs_wrapper_state(obs_w, final_path.with_suffix(".obs.pt"))
     print(f"[TD3] Done. Final checkpoint saved to: {final_path}")
 
     env.close()

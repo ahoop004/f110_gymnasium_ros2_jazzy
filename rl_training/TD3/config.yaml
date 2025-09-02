@@ -86,7 +86,7 @@ obs:
   #   "fixed" -> always divide by lidar_fixed_max
   #   "auto"  -> auto-calibrate effective max (good when mixing sim/ROS)
   lidar_max_mode: "fixed"
-  lidar_fixed_max: 30.0
+  lidar_max: 30.0
   lidar_min_effective: 10.0          # floor for auto mode (ignored if fixed)
   lidar_auto_percentile: 99.0
   lidar_effective_ema: 0.05
