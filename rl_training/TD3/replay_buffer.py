@@ -67,7 +67,7 @@ class PrioritizedReplayBuffer:
         else:
             probs = ps_alpha / denom
 
-        idxs = self.rng.choice(N, size=int(batch_size), replace=True, p=probs)
+        idxs = self.rng.choice(N, size=int(batch_size), replace=False, p=probs)
 
         # importance sampling weights
         beta = float(beta)

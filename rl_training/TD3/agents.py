@@ -222,6 +222,7 @@ class TD3Agent:
 
         self.critic_opt.zero_grad(set_to_none=True)
         critic_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
         self.critic_opt.step()
 
         # ---- Update priorities with min TD-error (L1)

@@ -50,7 +50,7 @@ def set_seed(seed: int) -> None:
 
 def ensure_dirs(paths: dict) -> Path:
     run_name = paths.get("run_name", f"td3_run_{int(time.time())}")
-    base_ckpt = Path(paths.get("checkpoints_dir", "./checkpoints"))
+    
     base_logs = Path(paths.get("logs_dir", "./logs"))
     # Create per-run folder under logs
     run_dir = base_logs / f"{run_name}_{int(time.time())}"
@@ -65,7 +65,7 @@ def save_yaml(d: dict, path: Path) -> None:
 
 def main(args: Optional[argparse.Namespace] = None):
     cnf_path = '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/TD3/config.yaml'
-    sv_pth = '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/TD3/models/model.pt'
+    
 
 
     with open(cnf_path, "r") as f:
@@ -77,6 +77,7 @@ def main(args: Optional[argparse.Namespace] = None):
     seed = int(cfg["train"].get("seed", 42))
     set_seed(seed)
     
+    model_path = cfg['env'].get('model')
     
     map_bounds = get_map_bounds(cfg['env'].get('map_path')+'.yaml')
     lidar_max = cfg["obs"]["lidar_max"]
@@ -133,6 +134,10 @@ def main(args: Optional[argparse.Namespace] = None):
         per_eps=cfg["per"]["priority_epsilon"],
     )
     agent = TD3Agent(obs_dim, act_dim, cfg=td3_cfg)
+    
+    if os.path.isfile(str(model_path + "best.pt")):
+        agent.load(str(model_path + "best.pt"))
+        print('loaded')
 
     buffer = PrioritizedReplayBuffer(
         obs_dim=obs_dim,
@@ -183,6 +188,9 @@ def main(args: Optional[argparse.Namespace] = None):
             actions_env = np.stack([ego_action, opp_action_env], axis=0).astype(np.float32)
 
             next_obs_dict, env_rew, terminated, truncated, info = env.step(actions_env)
+            
+            episode_ended = bool(terminated or truncated)  # for control/printing/etc.
+            done_for_td = bool(terminated)
             done = bool(terminated or truncated)
 
             next_obs_vec = obs_w.build(next_obs_dict)
@@ -190,7 +198,7 @@ def main(args: Optional[argparse.Namespace] = None):
             r = reward_w.compute(next_obs_dict)
 
             if not eval_mode:
-                buffer.add(obs_vec_local, act_norm, r, next_obs_vec, done)
+                buffer.add(obs_vec_local, act_norm, r, next_obs_vec, done_for_td)
 
                 # Learn (after update_after)
                 if global_steps >= update_after:
@@ -206,7 +214,7 @@ def main(args: Optional[argparse.Namespace] = None):
             # env.render()
             env.render()
 
-            if done:
+            if episode_ended or steps >= max_episode_steps:
                 break
 
         return total_r, steps
@@ -226,7 +234,7 @@ def main(args: Optional[argparse.Namespace] = None):
             # Save best
             if eval_ret > best_eval_return:
                 best_eval_return = eval_ret
-                best_path = run_dir / "checkpoints" / "best.pt"
+                best_path = model_path / "best.pt"
                 agent.save(str(best_path))
                 print(f"[SAVE] New best eval return {best_eval_return:.3f}  -> {best_path.name}")
 

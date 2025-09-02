@@ -29,7 +29,7 @@ bridge:
     # opponent parameters
     num_agent: 2
 
-    model: '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/DDPG/models/ddpg_checkpoint.pt'
+    model: '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/TD3/models'
 
     # ego starting pose on map
     sx: 0.0
@@ -64,6 +64,8 @@ env:
   max_episode_steps: 5000
   seed: 42
 
+  model: '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/TD3/models'
+
 
   # Start poses for [ego, opp] as [x, y, yaw] in meters/radians.
   # Replace with your track-specific values.
@@ -72,7 +74,7 @@ env:
     - [2.0, 0.5, 0.0]                # opponent
 
   # Action bounds used by your env; keep speed forward-only to start.
-  action_low:  [-0.4189, 0.0]        # [steer_min(rad), speed_min(m/s)]
+  action_low:  [-0.4189, -5.0]        # [steer_min(rad), speed_min(m/s)]
   action_high: [ 0.4189, 20.0]        # [steer_max(rad), speed_max(m/s)]
 
   # LiDAR geometry used by env/bridge
