@@ -284,12 +284,12 @@ def main(args: Optional[argparse.Namespace] = None):
             global_steps += (0 if eval_mode else 1)
             last_action_env = ego_action_env
             obs_dict_local = next_obs_dict
-            env.render()
-            if render_flag:
-                try:
-                    env.render()
-                except Exception:
-                    pass
+            # env.render()
+            # if render_flag:
+            #     try:
+            #         env.render()
+            #     except Exception:
+            #         pass
 
             if done:
                 break
