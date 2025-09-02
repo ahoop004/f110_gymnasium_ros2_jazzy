@@ -114,7 +114,7 @@ def main(args: Optional[argparse.Namespace] = None):
     obs_dim = obs_vec.size
     act_dim = int(len(action_low))  # expect 2
 
-    # --- Agent & PER
+
     td3_cfg = TD3Config(
         actor_hidden=tuple(cfg["td3"].get("actor_hidden", (128,128))),
         critic_hidden=tuple(cfg["td3"].get("critic_hidden", (128,128))),
@@ -149,16 +149,11 @@ def main(args: Optional[argparse.Namespace] = None):
     update_after = int(cfg["train"]["update_after"])
     batch_size = int(cfg["train"]["batch_size"])
     updates_per_step = int(cfg["train"]["updates_per_step"])
-    eval_every = int(cfg["train"]["eval_every_steps"])
-    save_every = int(cfg["train"]["save_every_steps"])
-    render_flag = bool(cfg["train"].get("render", True))
 
-    # --- Loop state
     global_steps = 0
     episode = 0
     best_eval_return = -1e9
 
-    # Helper to run one episode (train or eval)
     def run_episode(eval_mode: bool = False) -> Tuple[float, int]:
         nonlocal global_steps, episode
 
@@ -209,6 +204,7 @@ def main(args: Optional[argparse.Namespace] = None):
             global_steps += (0 if eval_mode else 1)
             obs_dict = next_obs_dict
             # env.render()
+            env.render()
 
             if done:
                 break
@@ -221,7 +217,7 @@ def main(args: Optional[argparse.Namespace] = None):
         episode += 1
         ep_ret, ep_steps = run_episode(eval_mode=False)
 
-        if (global_steps // max(1, eval_every)) != ((global_steps - ep_steps) // max(1, eval_every)):
+        if episode % 20 == 0:
             # Just crossed an eval boundary: run one eval episode
             
             eval_ret, eval_steps = run_episode(eval_mode=True)
@@ -236,19 +232,9 @@ def main(args: Optional[argparse.Namespace] = None):
 
             print(f"[EVAL] ret={eval_ret:.3f} steps={eval_steps} best={best_eval_return:.3f}")
 
-        # Periodic save by steps
-        if save_every > 0 and (global_steps % save_every) < ep_steps:
-            path = run_dir / "checkpoints" / f"step_{global_steps}.pt"
-            agent.save(str(path))
-            print(f"[SAVE] checkpoint @ step {global_steps}")
 
-        # Console log
         print(f"Ep {episode:04d} [TRAIN] | R: {ep_ret:.2f} | steps: {ep_steps} | buf: {len(buffer)} | gstep: {global_steps}")
 
-    # --- Final save
-    final_path = run_dir / "checkpoints" / "final.pt"
-    agent.save(str(final_path))
-    print(f"[TD3] Done. Final checkpoint saved to: {final_path}")
 
     env.close()
 
