@@ -21,16 +21,16 @@ class RewardWrapper:
     def __init__(
         self,
         alive_reward: float = 0.01,          # per-step time cost (will be subtracted)
-        crash_penalty: float = -1.0,        # negative value
-        k_progress: float = 0.01,            # scales forward progress (meters per step)
-        k_opp_crash: float = 10.0,
+        crash_penalty: float = -10.0,        # negative value
+        k_progress: float = 5.0,            # scales forward progress (meters per step)
+        k_opp_crash: float = 100.0,
 
-        k_smooth: float = 0.01,              # weight for smoothness penalty (set 0.0 to disable)
+        k_smooth: float = 0.00,              # weight for smoothness penalty (set 0.0 to disable)
         smooth_vel_weight: float = 0.25,     # relative weight for velocity change vs steering change
         k_dir: float = 0.01,                 # weight for directional alignment (set 0.0 to disable)
         fov_rad: float = 4.7,                # LiDAR field of view in radians (e.g., ~270°)
         
-        k_reverse: float = 0.2,          # penalty per meter of backward progress (>=0)
+        k_reverse: float = 0.3,          # penalty per meter of backward progress (>=0)
         no_progress_window: int = 20,    # steps to look back (e.g., 20 @ 100 Hz = 0.2 s)
         no_progress_eps: float = 0.02,   # meters of forward progress threshold over window
         no_progress_penalty: float = -0.5,

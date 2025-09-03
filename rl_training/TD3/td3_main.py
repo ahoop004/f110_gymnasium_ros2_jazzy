@@ -48,19 +48,6 @@ def set_seed(seed: int) -> None:
 
 
 
-def ensure_dirs(paths: dict) -> Path:
-    run_name = paths.get("run_name", f"td3_run_{int(time.time())}")
-    
-    base_logs = Path(paths.get("logs_dir", "./logs"))
-    # Create per-run folder under logs
-    run_dir = base_logs / f"{run_name}_{int(time.time())}"
-    (run_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
-    return run_dir
-
-
-def save_yaml(d: dict, path: Path) -> None:
-    with open(path, "w") as f:
-        yaml.safe_dump(d, f, sort_keys=False)
 
 
 def main(args: Optional[argparse.Namespace] = None):
@@ -71,9 +58,7 @@ def main(args: Optional[argparse.Namespace] = None):
     with open(cnf_path, "r") as f:
         cfg = yaml.safe_load(f)
 
-    # --- Dirs & seed
-    # run_dir = ensure_dirs(cfg.get("paths", {}))
-    # save_yaml(cfg, run_dir / "config.yaml")
+
     seed = int(cfg["train"].get("seed", 42))
     set_seed(seed)
     
@@ -98,6 +83,7 @@ def main(args: Optional[argparse.Namespace] = None):
                 map=cfg["env"]["map"],
                 map_ext=cfg["env"]["map_ext"],
                 num_agents=int(cfg["env"]["num_agents"]),
+                render_fps=30
             )
     
     
@@ -176,15 +162,12 @@ def main(args: Optional[argparse.Namespace] = None):
 
             obs_vec_local = obs_w.build(obs_dict)
 
-            # --- Ego action (normalized)
-            if (not eval_mode) and (global_steps < warmup_steps):
-                act_norm = np.random.uniform(-1.0, 1.0, size=act_dim).astype(np.float32)
-            else:
-                act_norm = agent.select_action(obs_vec_local, eval_mode=eval_mode)
+        
+            act_norm = agent.select_action(obs_vec_local, eval_mode=eval_mode)
                 
-            if not np.all(np.isfinite(act_norm)):
-                print("[WARN] Non-finite action from policy; zeroing.")
-                act_norm = np.zeros_like(act_norm)
+            # if not np.all(np.isfinite(act_norm)):
+            #     print("[WARN] Non-finite action from policy; zeroing.")
+            #     act_norm = np.zeros_like(act_norm)
 
             ego_action = act_wrap.build(act_norm)
 
@@ -218,7 +201,7 @@ def main(args: Optional[argparse.Namespace] = None):
             global_steps += (0 if eval_mode else 1)
             obs_dict = next_obs_dict
             # env.render()
-            # env.render()
+            env.render()
 
             if episode_ended or steps >= max_episode_steps:
                 break
@@ -227,7 +210,7 @@ def main(args: Optional[argparse.Namespace] = None):
 
     # --- Training loop
     print("[TD3] Starting training...")
-    while global_steps < total_steps:
+    while episode < 300:
         episode += 1
         ep_ret, ep_steps = run_episode(eval_mode=False)
 

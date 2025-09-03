@@ -1,7 +1,7 @@
 import numpy as np
 
 class OUNoise:
-    def __init__(self, size, mu=0.0, theta=0.15, sigma=0.2, dt=1.0):
+    def __init__(self, size, mu=0.0, theta=0.15, sigma=0.2, dt=0.01):
         self.size = size
         self.mu = mu
         self.theta = theta
