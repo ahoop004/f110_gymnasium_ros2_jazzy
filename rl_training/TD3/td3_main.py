@@ -72,8 +72,8 @@ def main(args: Optional[argparse.Namespace] = None):
         cfg = yaml.safe_load(f)
 
     # --- Dirs & seed
-    run_dir = ensure_dirs(cfg.get("paths", {}))
-    save_yaml(cfg, run_dir / "config.yaml")
+    # run_dir = ensure_dirs(cfg.get("paths", {}))
+    # save_yaml(cfg, run_dir / "config.yaml")
     seed = int(cfg["train"].get("seed", 42))
     set_seed(seed)
     

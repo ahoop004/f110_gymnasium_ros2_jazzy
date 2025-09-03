@@ -61,7 +61,7 @@ env:
   map: "/home/aaron/f110_gymnasium_ros2_jazzy/assets/maps/Shanghai_map"                # <- change me
   map_ext: ".png"
   num_agents: 2
-  max_episode_steps: 5000
+  max_episode_steps: 2000
   seed: 42
 
   model: '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/TD3/models/'
