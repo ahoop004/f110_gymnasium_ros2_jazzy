@@ -28,6 +28,18 @@ import torch.nn as nn
 import torch.optim as optim
 
 from models import ActorMLP, TwinCriticMLP
+from ou_noise import OUNoise
+
+def _rate_limited(prev: np.ndarray, proposed: np.ndarray, min_a: float, max_a: float, max_delta: float) -> np.ndarray:
+        """Clamp to global bounds, then limit per-step change around prev by ±max_delta."""
+        target = np.clip(proposed, min_a, max_a)
+        low = prev - max_delta
+        high = prev + max_delta
+        return np.clip(target, low, high)
+
+def _ema(prev: np.ndarray, current: np.ndarray, alpha: float) -> np.ndarray:
+    """Simple first-order low-pass filter."""
+    return (1.0 - alpha) * prev + alpha * current
 
 
 def to_tensor(x, device):
@@ -65,6 +77,18 @@ class TD3Config:
     per_beta_init: float = 0.4
     per_beta_final: float = 1.0
     per_eps: float = 1e-6
+    
+    vel_min: float = -5.0
+    vel_max: float = 20.0
+    
+    steer_min: float = -0.4198
+    steer_max: float = 0.4189
+    # per-step max change allowed in env units (slew-rate cap)
+    max_delta_steer: float = 0.015
+    max_delta_vel: float = 0.04
+    # exponential moving average blend (0<alpha<=1). lower = smoother
+    ema_alpha_steer: float = 0.3
+    ema_alpha_vel: float = 0.4
 
 
 class TD3Agent:
@@ -108,9 +132,14 @@ class TD3Agent:
         # Step counters
         self.total_updates: int = 0
         self.total_env_steps: int = 0  # (optional) can be set by td3_main if you want annealing by steps
+        # For action post-processing in env units
+        self.prev_action_env: Optional[np.ndarray] = None
 
         # PER beta schedule
         self._beta = self.cfg.per_beta_init
+        self.use_ou = True
+        self.ou_noise = OUNoise(size=self.act_dim,
+                        mu=0.0, theta=0.15, sigma=0.2)
 
         # For logging
         self._last_metrics: Dict[str, float] = {}
@@ -119,22 +148,67 @@ class TD3Agent:
 
     def select_action(self, obs: np.ndarray, eval_mode: bool = False) -> np.ndarray:
         """
-        Returns a normalized action in [-1,1]^act_dim.
-        Adds Gaussian exploration noise (clipped) when eval_mode=False.
+        Action layout: [steer, velocity]
+        Returns normalized action in [-1,1]^2.
+        Per-dimension bounds, rate limit (slew), and EMA smoothing are applied in env units.
         """
+        # ------------- Config vectors (per-dim) -------------
+        # Steering first, then velocity
+        a_min = np.array([self.cfg.steer_min, self.cfg.vel_min], dtype=np.float32)
+        a_max = np.array([self.cfg.steer_max, self.cfg.vel_max], dtype=np.float32)
+        max_delta = np.array([self.cfg.max_delta_steer, self.cfg.max_delta_vel], dtype=np.float32)
+        ema_alpha = np.array([self.cfg.ema_alpha_steer, self.cfg.ema_alpha_vel], dtype=np.float32)
+
+        # ------------- Actor forward (normalized space) -------------
         self.actor.eval()
         with torch.no_grad():
             obs_t = to_tensor(obs, self.device)
-            a = self.actor(obs_t).cpu().numpy()
-        a = a.reshape(-1)  # (act_dim,)
+            a_norm = self.actor(obs_t).cpu().numpy().reshape(-1)  # shape (2,), each in [-1,1]
 
+        # ------------- Exploration noise in normalized space -------------
         if not eval_mode:
-            noise = np.random.normal(0.0, self.cfg.expl_noise_std, size=self.act_dim).astype(np.float32)
-            if self.cfg.expl_noise_clip is not None:
-                noise = np.clip(noise, -self.cfg.expl_noise_clip, self.cfg.expl_noise_clip)
-            a = np.clip(a + noise, -1.0, 1.0)
+            if getattr(self, "use_ou", False) and getattr(self, "ou_noise", None) is not None:
+                noise = self.ou_noise.sample()  # shape (2,)
+                a_norm = np.clip(a_norm + noise, -1.0, 1.0)
+            else:
+                noise = np.random.normal(0.0, self.cfg.expl_noise_std, size=a_norm.shape).astype(np.float32)
+                if self.cfg.expl_noise_clip is not None:
+                    noise = np.clip(noise, -self.cfg.expl_noise_clip, self.cfg.expl_noise_clip)
+                a_norm = np.clip(a_norm + noise, -1.0, 1.0)
 
-        return a.astype(np.float32)
+        # ------------- Map normalized -> env units (per-dim affine) -------------
+        # [-1,1] -> [min,max] : x_env = (x_norm+1)/2 * (max-min) + min
+        a_env = ((a_norm + 1.0) * 0.5) * (a_max - a_min) + a_min
+
+        # Guards
+        if not np.all(np.isfinite(a_env)):
+            a_env = np.nan_to_num(a_env, nan=0.0, posinf=a_max, neginf=a_min)
+
+        # ------------- Rate limit + EMA in env units (per-dim) -------------
+        if self.prev_action_env is None:
+            a_env_limited = np.clip(a_env, a_min, a_max)
+        else:
+            # Rate limit around previous action: clamp proposed into [prev-max_delta, prev+max_delta]
+            low_win  = self.prev_action_env - max_delta
+            high_win = self.prev_action_env + max_delta
+            a_env_limited = np.clip(np.clip(a_env, a_min, a_max), low_win, high_win)
+
+            # Optional per-dim EMA smoothing
+            a_env_limited = (1.0 - ema_alpha) * self.prev_action_env + ema_alpha * a_env_limited
+            a_env_limited = np.clip(a_env_limited, a_min, a_max)
+
+        self.prev_action_env = a_env_limited.copy()
+
+        # ------------- Map env units -> normalized [-1,1] (per-dim) -------------
+        # [min,max] -> [-1,1] : x_norm = 2*(x_env-min)/(max-min) - 1
+        denom = (a_max - a_min)
+        # Avoid divide-by-zero if someone misconfigures identical min/max
+        denom = np.where(denom == 0.0, 1.0, denom)
+        a_norm_final = 2.0 * (a_env_limited - a_min) / denom - 1.0
+        a_norm_final = np.clip(a_norm_final.astype(np.float32), -1.0, 1.0)
+
+        return a_norm_final
+
 
     # ---------------- Replay helpers (optional) ----------------
 
@@ -302,3 +376,11 @@ class TD3Agent:
     def load(self, path: str, strict: bool = True) -> None:
         state = torch.load(path, map_location=self.device)
         self.load_state_dict(state, strict=strict)
+
+
+
+    
+    
+    def reset_action_state(self) -> None:
+        """Call at episode start to forget previous env action."""
+        self.prev_action_env = None

@@ -169,6 +169,8 @@ def main(args: Optional[argparse.Namespace] = None):
         truncated = False
         
         obs_dict, _ = env.reset(options=start_poses)
+        agent.ou_noise.reset()
+        agent.reset_action_state()
         
         while not done and steps < max_episode_steps:
 
@@ -179,6 +181,10 @@ def main(args: Optional[argparse.Namespace] = None):
                 act_norm = np.random.uniform(-1.0, 1.0, size=act_dim).astype(np.float32)
             else:
                 act_norm = agent.select_action(obs_vec_local, eval_mode=eval_mode)
+                
+            if not np.all(np.isfinite(act_norm)):
+                print("[WARN] Non-finite action from policy; zeroing.")
+                act_norm = np.zeros_like(act_norm)
 
             ego_action = act_wrap.build(act_norm)
 
@@ -212,7 +218,7 @@ def main(args: Optional[argparse.Namespace] = None):
             global_steps += (0 if eval_mode else 1)
             obs_dict = next_obs_dict
             # env.render()
-            env.render()
+            # env.render()
 
             if episode_ended or steps >= max_episode_steps:
                 break
@@ -234,9 +240,9 @@ def main(args: Optional[argparse.Namespace] = None):
             # Save best
             if eval_ret > best_eval_return:
                 best_eval_return = eval_ret
-                best_path = model_path / "best.pt"
-                agent.save(str(best_path))
-                print(f"[SAVE] New best eval return {best_eval_return:.3f}  -> {best_path.name}")
+                best_path = str(model_path + "best.pt")
+                agent.save(best_path)
+                print(f"[SAVE] New best eval return {best_eval_return:.3f}  ")
 
             print(f"[EVAL] ret={eval_ret:.3f} steps={eval_steps} best={best_eval_return:.3f}")
 
