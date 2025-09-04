@@ -20,10 +20,10 @@ class RewardWrapper:
 
     def __init__(
         self,
-        alive_reward: float = 0.01,          # per-step time cost (will be subtracted)
+        alive_reward: float = 0.02,          # per-step time cost (will be subtracted)
         crash_penalty: float = -10.0,        # negative value
         k_progress: float = 5.0,            # scales forward progress (meters per step)
-        k_opp_crash: float = 100.0,
+        k_opp_crash: float = 50.0,
 
         k_smooth: float = 0.00,              # weight for smoothness penalty (set 0.0 to disable)
         smooth_vel_weight: float = 0.25,     # relative weight for velocity change vs steering change
@@ -31,9 +31,10 @@ class RewardWrapper:
         fov_rad: float = 4.7,                # LiDAR field of view in radians (e.g., ~270°)
         
         k_reverse: float = 0.3,          # penalty per meter of backward progress (>=0)
-        no_progress_window: int = 20,    # steps to look back (e.g., 20 @ 100 Hz = 0.2 s)
-        no_progress_eps: float = 0.02,   # meters of forward progress threshold over window
-        no_progress_penalty: float = -0.5,
+        no_progress_window: int = 10,    # steps to look back (e.g., 20 @ 100 Hz = 0.2 s)
+        no_progress_eps: float = 0.05,   # meters of forward progress threshold over window
+        no_progress_penalty: float = -5.0,
+        
     ):
         self.alive_reward = float(alive_reward)
         self.crash_penalty = float(crash_penalty)
@@ -56,6 +57,24 @@ class RewardWrapper:
         self._prev_action = None      # (steer_norm, vel_norm) in [-1, 1]
         self._ds_hist = deque(maxlen=self.no_progress_window)
         self._prev_collisions = None
+        
+        
+        self.k_block = 0.3
+        self.block_dist = 0.5    # meters
+        self.block_lat = 0.6   
+        
+        self.k_lead_gain = 1.0        # per-meter lead gain
+        self.k_lead_cross = 30.0      # one-time bonus when ego crosses to lead
+        self._prev_long = None        # track last-step longitudinal offset wrt opp
+        self.desired_lat = 0.6        # optional: encourage aligning to opp lane center
+        
+        self.k_behind_speed = 0.25
+        
+        self.k_dir = 0.02
+        self.dir_speed_scale = 0.02
+        
+        self.crawl_dist_per_step = 0.002   # 2 mm/step ≈ 0.2 m/s @ 100 Hz
+        self.k_crawl_pen = -0.05
 
     # -------- Public API --------
 
@@ -92,7 +111,30 @@ class RewardWrapper:
         x = float(observations["poses_x"][ego])
         y = float(observations["poses_y"][ego])
         th = float(observations["poses_theta"][ego])
+       
         crashed = bool(observations["collisions"][ego])
+        
+        scan = np.asarray(observations["scans"][ego], dtype=np.float32)
+        
+        total = 0.0
+        
+        opp_idx=1
+        # positions and opponent heading
+        ox = float(observations["poses_x"][opp_idx])
+        oy = float(observations["poses_y"][opp_idx])
+        oth = float(observations["poses_theta"][opp_idx])
+        dx, dy = x - ox, y - oy
+        # opponent forward/right unit vectors
+       
+        ux, uy = math.cos(oth), math.sin(oth)
+        rx, ry = -uy, ux
+        long = dx*ux + dy*uy   # + in front of opponent
+        lat  = abs(dx*rx + dy*ry)
+       
+        if 0.0 < long < self.block_dist and lat < self.block_lat:
+            total += self.k_block * (self.block_dist - long)
+        
+        
         if self.k_opp_crash != 0.0 and "collisions" in observations:
             try:
                 curr = np.asarray(observations["collisions"], dtype=np.int8)
@@ -116,16 +158,38 @@ class RewardWrapper:
                 opp_mask[ego_idx] = False
 
                 new_opp_crashes = int(np.sum(new_events & opp_mask))
+                ego_crash = int(observations["collisions"][0])
 
-                if new_opp_crashes > 0:
+                if (new_opp_crashes > 0) and (ego_crash==0):
                     total += self.k_opp_crash * float(new_opp_crashes)
             except Exception:
                 pass
-
-        total = 0.0
+        
+        if self.k_dir > 0.0:
+            align = self._directional_alignment(scan)
+            # distance moved this step (meters/step)
+            if self._prev_pose is not None:
+                dx = x - self._prev_pose[0]; dy = y - self._prev_pose[1]
+                dist_step = math.hypot(dx, dy)
+            else:
+                dist_step = 0.0
+            speed_scale = min(1.0, dist_step / max(1e-6, self.dir_speed_scale))
+            total += self.k_dir * align * speed_scale
 
         # Per-step time cost
         total -= self.alive_reward
+        if dist_step < self.crawl_dist_per_step:
+            total += self.k_crawl_pen
+        if self._prev_long is not None:
+            dlong = long - self._prev_long         # meters gained along opp's forward axis
+            if dlong > 0:
+                total += self.k_lead_gain * dlong
+
+            # crossing event: behind -> ahead
+            if self._prev_long <= 0.0 and long > 0.0:
+                total += self.k_lead_cross
+        if long > -0.5:  # close enough to start lining up
+            total += 0.2 * max(0.0, self.desired_lat - lat)
 
         # Crash penalty
         if crashed:
@@ -167,7 +231,14 @@ class RewardWrapper:
                 self._prev_collisions = np.asarray(observations["collisions"], dtype=np.int8).copy()
             except Exception:
                 self._prev_collisions = None
-
+        self._prev_long = long
+        
+        
+        if action is not None and long < 0.0:
+            # action[1] is normalized velocity in [-1,1]
+            total += self.k_behind_speed * max(0.0, float(action[1]))
+        
+        
         return float(total)
 
     # -------- Private helpers --------

@@ -87,7 +87,7 @@ def main(args: Optional[argparse.Namespace] = None):
             )
     
     
-    max_episode_steps = int(cfg["env"].get("max_episode_steps", 2000))
+    max_episode_steps = int(cfg["env"].get("max_episode_steps", 5000))
     
     
     start_poses = cfg["env"].get("start_poses", None)
@@ -103,8 +103,8 @@ def main(args: Optional[argparse.Namespace] = None):
 
 
     td3_cfg = TD3Config(
-        actor_hidden=tuple(cfg["td3"].get("actor_hidden", (128,128))),
-        critic_hidden=tuple(cfg["td3"].get("critic_hidden", (128,128))),
+        actor_hidden=tuple(cfg["td3"].get("actor_hidden", (256,256))),
+        critic_hidden=tuple(cfg["td3"].get("critic_hidden", (256,256))),
         gamma=cfg["td3"]["gamma"],
         tau=cfg["td3"]["tau"],
         actor_lr=cfg["td3"]["actor_lr"],
@@ -155,6 +155,7 @@ def main(args: Optional[argparse.Namespace] = None):
         truncated = False
         
         obs_dict, _ = env.reset(options=start_poses)
+        reward_w.reset(obs_dict)  
         agent.ou_noise.reset()
         agent.reset_action_state()
         
@@ -184,7 +185,9 @@ def main(args: Optional[argparse.Namespace] = None):
 
             next_obs_vec = obs_w.build(next_obs_dict)
 
-            r = reward_w.compute(next_obs_dict)
+            r = reward_w.compute(next_obs_dict,act_norm)
+            if truncated and not terminated:     # timed out
+                r += -15.0 
 
             if not eval_mode:
                 buffer.add(obs_vec_local, act_norm, r, next_obs_vec, done_for_td)
@@ -201,7 +204,7 @@ def main(args: Optional[argparse.Namespace] = None):
             global_steps += (0 if eval_mode else 1)
             obs_dict = next_obs_dict
             # env.render()
-            env.render()
+            # env.render()
 
             if episode_ended or steps >= max_episode_steps:
                 break
@@ -210,7 +213,7 @@ def main(args: Optional[argparse.Namespace] = None):
 
     # --- Training loop
     print("[TD3] Starting training...")
-    while episode < 300:
+    while episode < 5000:
         episode += 1
         ep_ret, ep_steps = run_episode(eval_mode=False)
 

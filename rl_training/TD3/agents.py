@@ -84,11 +84,11 @@ class TD3Config:
     steer_min: float = -0.4198
     steer_max: float = 0.4189
     # per-step max change allowed in env units (slew-rate cap)
-    max_delta_steer: float = 0.015
-    max_delta_vel: float = 0.04
+    max_delta_steer: float = 0.004
+    max_delta_vel: float = 0.06
     # exponential moving average blend (0<alpha<=1). lower = smoother
-    ema_alpha_steer: float = 0.3
-    ema_alpha_vel: float = 0.4
+    ema_alpha_steer: float = 0.15
+    ema_alpha_vel: float = 0.3
 
 
 class TD3Agent:
@@ -139,7 +139,7 @@ class TD3Agent:
         self._beta = self.cfg.per_beta_init
         self.use_ou = True
         self.ou_noise = OUNoise(size=self.act_dim,
-                        mu=0.0, theta=0.15, sigma=0.2)
+                        mu=0.0, theta=0.15, sigma=0.4)
 
         # For logging
         self._last_metrics: Dict[str, float] = {}

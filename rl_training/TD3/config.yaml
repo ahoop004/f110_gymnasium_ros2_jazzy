@@ -101,7 +101,7 @@ obs:
   v_pos_max: 3.0                     # speed normalizer (m/s)
   yaw_rate_norm: 10.0                # matches env obs bound
   steer_max_abs: 0.4189              # rad, for last_action norm if units='env'
-  speed_max: 3.0
+  speed_max: 20.0
   last_action_units: "env"           # 'env' (physical) or 'normalized' ([-1,1])
 
   # Which scalar groups to include in the vector
@@ -172,25 +172,20 @@ td3:
   critic_lr: 3.0e-4
   policy_freq: 2
   # (policy_noise/noise_clip are in action: they’re also used in the agent)
-  action_min: float = -5.0
-  action_max: float = 20.0
-  # per-step max change allowed in env units (slew-rate cap)
-  max_delta: float = 0.8
-  # exponential moving average blend (0<alpha<=1). lower = smoother
-  ema_alpha: float = 0.4
+
 
 per:
   alpha: 0.6
   beta_init: 0.4
   beta_final: 1.0
-  capacity: 1000000
+  capacity: 10000
   priority_epsilon: 1.0e-6
 
 train:
   total_steps: 1000000
   warmup_steps: 1000
   update_after: 1000
-  batch_size: 64
+  batch_size: 256
   updates_per_step: 1
   eval_every_steps: 10000
   save_every_steps: 50000
