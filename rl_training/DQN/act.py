@@ -1,13 +1,12 @@
-# action_wrapper.py
-
 import numpy as np
 from typing import Optional, Literal
 
 class ActionWrapper:
     """
     Maps agent actions from [-1, 1] into environment inputs [steer, speed].
-    - mode="direct": action = [delta_norm, v_norm]  (your current behavior)
+    - mode="direct": action = [delta_norm, v_norm]
     - mode="rates" : action = [deltadot_norm, accel_norm] -> integrate with dt
+                     Uses asymmetric accel limits: accel_fwd_max ( + ), accel_brake_max ( − ).
 
     Decision gating:
       - Fixed frame-skip: set decision_every > 1 and leave can_choose=None in build()
@@ -26,8 +25,9 @@ class ActionWrapper:
         mode: Literal["direct", "rates"] = "direct",
         # Integration params for mode="rates"
         dt: float = 0.01,
-        delta_rate_max: float = 2.5,       # rad/s   (±0.025 rad per step @ dt=0.01)
-        accel_max: float = 5.0,            # m/s^2   (±0.05 m/s per step @ dt=0.01)
+        delta_rate_max: float = 2.5,       # rad/s   (±0.025 rad/step @ dt=0.01)
+        accel_fwd_max: float = 5.0,        # m/s^2   (positive accel limit)
+        accel_brake_max: float = 8.0,      # m/s^2   (magnitude for negative accel)
     ):
         # Validate ranges
         if not (steer_max > steer_min):
@@ -38,6 +38,8 @@ class ActionWrapper:
             raise ValueError("decision_every must be >= 1")
         if dt <= 0:
             raise ValueError("dt must be > 0")
+        if accel_fwd_max <= 0 or accel_brake_max <= 0:
+            raise ValueError("accel_fwd_max and accel_brake_max must be > 0")
 
         self.steer_min = float(steer_min)
         self.steer_max = float(steer_max)
@@ -60,7 +62,8 @@ class ActionWrapper:
         self.mode = mode
         self.dt = float(dt)
         self.delta_rate_max = float(delta_rate_max)
-        self.accel_max      = float(accel_max)
+        self.accel_fwd_max  = float(accel_fwd_max)
+        self.accel_brake_max= float(accel_brake_max)
 
         # Internal state for rates mode (last commanded)
         self._last_cmd_steer: Optional[float] = None
@@ -123,7 +126,13 @@ class ActionWrapper:
             elif self.mode == "rates":
                 # Map normalized to physical rates
                 deltadot = self.delta_rate_max * float(a[0, 0])   # rad/s
-                accel    = self.accel_max      * float(a[0, 1])   # m/s^2
+
+                # Asymmetric accel: positive -> accel_fwd_max, negative -> -accel_brake_max
+                accel_norm = float(a[0, 1])
+                if accel_norm >= 0.0:
+                    accel = accel_norm * self.accel_fwd_max        # + m/s^2
+                else:
+                    accel = accel_norm * self.accel_brake_max      # − m/s^2 (larger magnitude allowed)
 
                 # Choose integration start: measured preferred, else last commanded, else centers
                 if cur_steer is not None:
@@ -169,4 +178,3 @@ class ActionWrapper:
         if hasattr(x, "detach") and hasattr(x, "cpu") and hasattr(x, "numpy"):
             return x.detach().cpu().numpy().astype(np.float32, copy=False)
         return np.asarray(x, dtype=np.float32)
-
