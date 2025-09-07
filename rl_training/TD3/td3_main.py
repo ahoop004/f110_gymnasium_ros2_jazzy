@@ -66,7 +66,8 @@ def main(args: Optional[argparse.Namespace] = None):
     
     map_bounds = get_map_bounds(cfg['env'].get('map_path')+'.yaml')
     lidar_max = cfg["obs"]["lidar_max"]
-    obs_w = ObservationWrapper(lidar_max,map_bounds)
+    obs_w = ObservationWrapper(lidar_max,map_bounds,lidar_reduce_mode="subsample",
+    lidar_reduce_factor=6,)
     
     action_low = np.array(cfg["env"]["action_low"], dtype=np.float32)
     action_high = np.array(cfg["env"]["action_high"], dtype=np.float32)
@@ -204,7 +205,7 @@ def main(args: Optional[argparse.Namespace] = None):
             global_steps += (0 if eval_mode else 1)
             obs_dict = next_obs_dict
             # env.render()
-            # env.render()
+            env.render()
 
             if episode_ended or steps >= max_episode_steps:
                 break
