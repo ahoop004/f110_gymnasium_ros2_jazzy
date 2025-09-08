@@ -3,7 +3,6 @@
 from __future__ import annotations
 import os
 import argparse
-import random
 from typing import Optional, Tuple
 import random
 from collections import deque
@@ -156,6 +155,12 @@ def main():
         terminated = False
         truncated = False
         avg_speed_acc = 0.0
+        large_steer_cnt = 0
+        idle_cnt = 0
+        STEER_THRESH = 0.35   # rad, ~20°
+        IDLE_SPEED  = 0.50    # m/s
+        
+        
         if all_start_poses is not None:
             ego_pose, opp_pose = random.choice(all_start_poses)
             start_poses = np.array([ego_pose, opp_pose], dtype=np.float32)
@@ -166,8 +171,7 @@ def main():
         ego = int(obs_dict["ego_idx"])
         act_wrap.reset()
         reward_w.reset(obs_dict)  
-        if hasattr(agent, "ou_noise"):
-            agent.ou_noise.reset()
+
         agent.reset_action_state()
         
         while not done and steps < max_episode_steps:
@@ -183,6 +187,10 @@ def main():
 
             ego_action = act_wrap.build(act_norm)
             avg_speed_acc += float(ego_action[1])
+            if abs(float(ego_action[0])) > STEER_THRESH:
+                large_steer_cnt += 1
+            if float(ego_action[1]) < IDLE_SPEED:
+                idle_cnt += 1
 
             opp = 1 - ego
             opp_scan = np.asarray(obs_dict["scans"][opp], dtype=np.float32)
@@ -244,6 +252,8 @@ def main():
         metrics = {
             "term": term,
             "avg_speed": (avg_speed_acc / max(1, steps)),
+            "pct_large_steer": (100.0 * large_steer_cnt / max(1, steps)),
+            "pct_idle": (100.0 * idle_cnt / max(1, steps)),
         }
         return total_r, steps, metrics
 
@@ -262,9 +272,14 @@ def main():
         ema_disp = ema_ret if ema_ret is not None else ep_ret
 
         if episode % 20 == 0:
-            # Just crossed an eval boundary: run one eval episode
+            eval_rets, eval_steps_list = [], []
+            for _ in range(3):
+                er, es, _ = run_episode(eval_mode=True)
+                eval_rets.append(er); eval_steps_list.append(es)
+            eval_ret = float(np.mean(eval_rets))
+            eval_steps = int(np.mean(eval_steps_list))
             
-            eval_ret, eval_steps, _ = run_episode(eval_mode=True)
+            # eval_ret, eval_steps, _ = run_episode(eval_mode=True)
             
 
             # Save best
@@ -281,7 +296,16 @@ def main():
             f"Ep {episode:04d} [TRAIN] | "
             f"R: {ep_ret:.2f} | MA100: {ma100:.2f} | EMA: {ema_disp:.2f} | "
             f"steps: {ep_steps} | term: {m['term']} | avg_v: {m['avg_speed']:.2f}"
+            f"%|steer|>0.35: {m['pct_large_steer']:.1f} | %idle<0.5: {m['pct_idle']:.1f}"
         )
+        
+        if episode % 100 == 0:
+            tot = sum(term_counts.values()) or 1
+            oppp = 100.0 * term_counts.get("opp_crash", 0) / tot
+            egop = 100.0 * term_counts.get("ego_crash", 0) / tot
+            timep = 100.0 * term_counts.get("timeout",   0) / tot
+            print(f"[TERMS last {tot}] opp:{oppp:.1f}% ego:{egop:.1f}% timeout:{timep:.1f}%")
+            term_counts = {"opp_crash": 0, "ego_crash": 0, "timeout": 0}  # reset window
 
 
     env.close()

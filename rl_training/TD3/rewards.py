@@ -19,7 +19,7 @@ class RewardWrapper:
     def __init__(
         self,
         alive_cost: float = 0.005,        # per-step time cost
-        crash_ego_penalty: float = -20.0,
+        crash_ego_penalty: float = -120.0,
         crash_opp_bonus: float = 100.0,   # paid once at new opp crash event
         progress_gain: float = 10.0,      # per meter (forward)
         reverse_gain: float = 5.0,       # per meter (backwards)
