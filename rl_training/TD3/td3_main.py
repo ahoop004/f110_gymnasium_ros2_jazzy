@@ -104,7 +104,7 @@ def main(args: Optional[argparse.Namespace] = None):
         start_poses = np.array(start_poses, dtype=np.float32)
 
 
-    obs_dict, info = env.reset(options=start_poses)
+    obs_dict, info = env.reset(seed=seed,options=start_poses)
     
     ego = int(obs_dict["ego_idx"])
     vx  = float(obs_dict["linear_vels_x"][ego])
@@ -180,18 +180,23 @@ def main(args: Optional[argparse.Namespace] = None):
         while not done and steps < max_episode_steps:
 
             obs_vec_local = obs_w.build(obs_dict)
+            
+            if not eval_mode and global_steps < warmup_steps:
+                act_norm = np.random.uniform(low=-1.0, high=1.0, size=(act_dim,)).astype(np.float32)
+            else:
+                act_norm = agent.select_action(obs_vec_local, eval_mode=eval_mode)
+
+            
 
         
-            act_norm = agent.select_action(obs_vec_local, eval_mode=eval_mode)
+            # act_norm = agent.select_action(obs_vec_local, eval_mode=eval_mode)
             
             cur_speed = float(np.hypot(
                 float(obs_dict["linear_vels_x"][ego]),
                 float(obs_dict["linear_vels_y"][ego])
             ))
                 
-            # if not np.all(np.isfinite(act_norm)):
-            #     print("[WARN] Non-finite action from policy; zeroing.")
-            #     act_norm = np.zeros_like(act_norm)
+
 
             ego_action = act_wrap.build(act_norm, cur_speed=cur_speed)
 
@@ -227,7 +232,7 @@ def main(args: Optional[argparse.Namespace] = None):
             global_steps += (0 if eval_mode else 1)
             obs_dict = next_obs_dict
             # env.render()
-            env.render()
+            # env.render() 
 
             if episode_ended or steps >= max_episode_steps:
                 break

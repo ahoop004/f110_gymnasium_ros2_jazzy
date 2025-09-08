@@ -18,7 +18,6 @@ bridge:
     
     # laserscan parameters
     scan_fov: 4.7
-    # scan_fov: 6.2
     scan_beams: 1080
 
     # map parameters
@@ -41,16 +40,9 @@ bridge:
     sy1: 0.5
     stheta1: 0.0
 
-    ego_controller: gap_follow    # gap_follow | rl
-    opp_controller: gap_follow    # gap_follow | none | rl (if you ever have one)
+    ego_controller: gap_follow    
+    opp_controller: gap_follow    
     kb_teleop: false
-
-    # teleop
-    kb_teleop: False
-
-
-
-
 
 
 env:
@@ -61,7 +53,7 @@ env:
   map: "/home/aaron/f110_gymnasium_ros2_jazzy/assets/maps/Shanghai_map"                # <- change me
   map_ext: ".png"
   num_agents: 2
-  max_episode_steps: 2000
+  max_episode_steps: 5000
   seed: 42
 
   model: '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/TD3/models/'
@@ -84,45 +76,9 @@ env:
     range_max_m: 30.0                # you updated the env to 30 m
 
 obs:
-  # LiDAR normalization:
-  #   "fixed" -> always divide by lidar_fixed_max
-  #   "auto"  -> auto-calibrate effective max (good when mixing sim/ROS)
-  lidar_max_mode: "fixed"
+
   lidar_max: 30.0
-  lidar_min_effective: 10.0          # floor for auto mode (ignored if fixed)
-  lidar_auto_percentile: 99.0
-  lidar_effective_ema: 0.05
-
-  # LiDAR shaping
-  lidar_downsample: 1                # pooling size (1 = no downsample)
-  history_k: 1                       # LiDAR frame stacking (1 = no history)
-
-  # Scalar normalization (should match env/action bounds)
-  v_pos_max: 3.0                     # speed normalizer (m/s)
-  yaw_rate_norm: 10.0                # matches env obs bound
-  steer_max_abs: 0.4189              # rad, for last_action norm if units='env'
-  speed_max: 20.0
-  last_action_units: "env"           # 'env' (physical) or 'normalized' ([-1,1])
-
-  # Which scalar groups to include in the vector
-  include:
-    last_action: true
-    clearance: true
-    opponent: true
-    track: false                     # requires centerline helper; keep false for now
-
-  # Sectors (degrees) used for clearance summaries
-  sectors:
-    forward_half_deg: 15.0
-    side_low_deg: 60.0
-    side_high_deg: 90.0
-
-opponent:
-  policy: "gap_follow"
-  # Optional gap-follow tuning knobs (if your helper supports them)
-  params:
-    speed_cap_mps: 2.5
-    smooth_steer: true
+         # floor for auto mode (ignored if fixed)
 
 action:
   # Exploration noise on actor output before mapping to env bounds
@@ -132,44 +88,14 @@ action:
   policy_noise: 0.20
   noise_clip: 0.50
 
-  # Optional safety governors (applied after mapping to env units)
-  # governors:
-  #   enable_clearance_speed_cap: true
-  #   forward_clearance_q: 0.10        # use q10 in ±15° forward sector
-  #   min_clearance_m: 0.60
-  #   min_speed_mps: 0.0
-  #   max_speed_mps: 3.0
-  #   enable_steer_rate_limit: true
-  #   steer_rate_limit_rad_per_step: 0.02
-  #   clearance_gain: 2.0
-  #   enable_accel_limit: true
-  #   accel_limit_mps2: 1.0
-
-reward:
-  # If you replace env reward, wire your rewards.py to use these weights.
-  # Keep numbers O(1) to help stability.
-  weights:
-    progress: 5.0
-    alive_bonus: 0.5
-    wall_clearance: 0.30
-    opponent_clearance: 0.30
-    lateral_error: 0.25
-    steering_smoothness: 0.10
-  params:
-    dt: 0.01
-    wall_quantile: 0.10
-    near_wall_dist_m: 0.30
-    opponent_safe_dist_m: 0.60
-    grace_steps_wall: 25
-    grace_steps_opp: 175
 
 td3:
-  actor_hidden: [256, 256]
-  critic_hidden: [256, 256]
+  actor_hidden: [128, 128]
+  critic_hidden: [128, 128]
   gamma: 0.99
-  tau: 0.05
+  tau: 0.005
   actor_lr: 3.0e-4
-  critic_lr: 3.0e-4
+  critic_lr: 1.0e-4
   policy_freq: 2
   # (policy_noise/noise_clip are in action: they’re also used in the agent)
 
@@ -178,14 +104,14 @@ per:
   alpha: 0.6
   beta_init: 0.4
   beta_final: 1.0
-  capacity: 10000
+  capacity: 1000000
   priority_epsilon: 1.0e-6
 
 train:
   total_steps: 1000000
-  warmup_steps: 1000
+  warmup_steps: 10000
   update_after: 1000
-  batch_size: 256
+  batch_size: 64
   updates_per_step: 1
   eval_every_steps: 10000
   save_every_steps: 50000
