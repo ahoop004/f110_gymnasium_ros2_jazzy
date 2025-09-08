@@ -14,14 +14,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-__all__ = [
-    "ActorMLP",
-    "QNetworkMLP",
-    "TwinCriticMLP",
-    "init_linear_",
-    "count_parameters",
-]
-
 
 # -------------------------
 # Utilities
@@ -43,9 +35,6 @@ def init_linear_(layer: nn.Linear, *, last: bool = False, last_w_scale: float = 
             nn.init.constant_(layer.bias, 0.0)
 
 
-def count_parameters(module: nn.Module) -> int:
-    """Number of trainable parameters."""
-    return sum(p.numel() for p in module.parameters() if p.requires_grad)
 
 
 def _build_mlp(sizes: Sequence[int], activation: nn.Module = nn.ReLU()) -> nn.Sequential:
@@ -66,21 +55,7 @@ def _build_mlp(sizes: Sequence[int], activation: nn.Module = nn.ReLU()) -> nn.Se
 # -------------------------
 
 class ActorMLP(nn.Module):
-    """
-    Deterministic policy network for TD3 (MLP).
-    Maps a flat observation vector to a normalized action a_norm in [-1, 1]^act_dim.
 
-    Args:
-        obs_dim:       input dimension (from observation_wrapper.obs_dim())
-        act_dim:       number of action components (e.g., 2 -> [steer, speed])
-        hidden_sizes:  e.g., (256, 256)
-        activation:    hidden activation (default ReLU)
-        last_w_scale:  initialize final layer weights in [-last_w_scale, +last_w_scale]
-
-    Notes:
-        - Output is tanh-bounded in [-1, 1]; env scaling is handled elsewhere.
-        - Exploration noise is added in the agent (not here).
-    """
     def __init__(
         self,
         obs_dim: int,
@@ -111,10 +86,7 @@ class ActorMLP(nn.Module):
         a = torch.tanh(self.mu(x))
         return a
 
-    @torch.no_grad()
-    def predict(self, obs: torch.Tensor) -> torch.Tensor:
-        """No-grad helper for acting. Returns a_norm in [-1,1]."""
-        return self.forward(obs)
+
 
 
 # -------------------------

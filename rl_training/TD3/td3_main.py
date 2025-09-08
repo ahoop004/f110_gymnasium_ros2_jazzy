@@ -1,28 +1,10 @@
-# td3_main.py
-# TD3 training loop for the F1TENTH LIMO setup (single ego + gap-follow opponent).
-# - Loads config.yaml
-# - Creates env, observation wrapper, action mapper, agent, and PER buffer
-# - Runs train/eval loops with warmup, periodic checkpoints, and basic logging
-#
-# Notes:
-# - Uses env reward for now. We'll plug in rewards.py next.
-# - Stores *normalized* actions in replay (as required by TD3Agent).
-# - Opponent uses gap-follow (from your helper if available; else a safe fallback).
-#
-# Run:
-#   python td3_main.py --config ./config.yaml
+
 
 from __future__ import annotations
 import os
-import sys
-import time
-import math
-import json
 import argparse
 import random
-from pathlib import Path
 from typing import Optional, Tuple
-from collections import deque
 
 import numpy as np
 import torch
@@ -35,7 +17,6 @@ from agents import TD3Agent, TD3Config
 from replay_buffer import PrioritizedReplayBuffer
 from rewards import RewardWrapper
 from map_utils import get_map_bounds
-
 from gap_follow import gap_follow_action
 
 
@@ -48,13 +29,9 @@ def set_seed(seed: int) -> None:
 
 
 
-
-
-def main(args: Optional[argparse.Namespace] = None):
+def main():
     cnf_path = '/home/aaron/f110_gymnasium_ros2_jazzy/rl_training/TD3/config.yaml'
     
-
-
     with open(cnf_path, "r") as f:
         cfg = yaml.safe_load(f)
 
@@ -66,7 +43,7 @@ def main(args: Optional[argparse.Namespace] = None):
     
     map_bounds = get_map_bounds(cfg['env'].get('map_path')+'.yaml')
     lidar_max = cfg["obs"]["lidar_max"]
-    obs_w = ObservationWrapper(lidar_max,map_bounds,lidar_reduce_mode="subsample",
+    obs_w = ObservationWrapper(lidar_max,map_bounds,
     lidar_reduce_factor=6,)
     
     action_low = np.array(cfg["env"]["action_low"], dtype=np.float32)
@@ -174,7 +151,8 @@ def main(args: Optional[argparse.Namespace] = None):
         vy  = float(obs_dict["linear_vels_y"][ego])
         act_wrap.reset(init_steer=0.0, init_speed=float(np.hypot(vx, vy)))
         reward_w.reset(obs_dict)  
-        agent.ou_noise.reset()
+        if hasattr(agent, "ou_noise"):
+            agent.ou_noise.reset()
         agent.reset_action_state()
         
         while not done and steps < max_episode_steps:
@@ -200,10 +178,14 @@ def main(args: Optional[argparse.Namespace] = None):
 
             ego_action = act_wrap.build(act_norm, cur_speed=cur_speed)
 
-            opp_scan = np.asarray(obs_dict["scans"][1], dtype=np.float32)
+            opp = 1 - ego
+            opp_scan = np.asarray(obs_dict["scans"][opp], dtype=np.float32)
             opp_action_env = gap_follow_action(opp_scan).astype(np.float32)
 
-            actions_env = np.stack([ego_action, opp_action_env], axis=0).astype(np.float32)
+            actions_env = np.zeros((2, 2), dtype=np.float32)
+            actions_env[ego] = ego_action
+            actions_env[opp] = opp_action_env
+            actions_env = actions_env.astype(np.float32)
 
             next_obs_dict, env_rew, terminated, truncated, info = env.step(actions_env)
             
@@ -232,7 +214,7 @@ def main(args: Optional[argparse.Namespace] = None):
             global_steps += (0 if eval_mode else 1)
             obs_dict = next_obs_dict
             # env.render()
-            # env.render() 
+
 
             if episode_ended or steps >= max_episode_steps:
                 break
