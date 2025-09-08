@@ -41,10 +41,6 @@ def main():
     
     model_path = cfg['env'].get('model')
     
-    map_bounds = get_map_bounds(cfg['env'].get('map_path')+'.yaml')
-    lidar_max = cfg["obs"]["lidar_max"]
-    obs_w = ObservationWrapper(lidar_max,map_bounds,
-    lidar_reduce_factor=6,)
     
     action_low = np.array(cfg["env"]["action_low"], dtype=np.float32)
     action_high = np.array(cfg["env"]["action_high"], dtype=np.float32)
@@ -52,11 +48,13 @@ def main():
                              float(action_high[0]),
                              float(action_low[1]),
                              float(action_high[1]),
-                             mode="rates",
-                             decision_every=10,
-                             dt=0.01,
-                             delta_rate_max=5.0,
-                             accel_max=10.0,)
+                             clip=True,
+                             allow_reverse=False
+                             )
+    map_bounds = get_map_bounds(cfg['env'].get('map_path')+'.yaml')
+    lidar_max = cfg["obs"]["lidar_max"]
+    obs_w = ObservationWrapper(lidar_max,map_bounds,action_high[1],
+    lidar_reduce_factor=6,)
     
     
     reward_w = RewardWrapper()
@@ -82,11 +80,6 @@ def main():
 
 
     obs_dict, info = env.reset(seed=seed,options=start_poses)
-    
-    ego = int(obs_dict["ego_idx"])
-    vx  = float(obs_dict["linear_vels_x"][ego])
-    vy  = float(obs_dict["linear_vels_y"][ego])
-    act_wrap.reset(init_steer=0.0, init_speed=float(np.hypot(vx, vy)))
 
     obs_vec= obs_w.build(obs_dict)
     obs_dim = obs_vec.size
@@ -147,9 +140,7 @@ def main():
         
         obs_dict, _ = env.reset(options=start_poses)
         ego = int(obs_dict["ego_idx"])
-        vx  = float(obs_dict["linear_vels_x"][ego])
-        vy  = float(obs_dict["linear_vels_y"][ego])
-        act_wrap.reset(init_steer=0.0, init_speed=float(np.hypot(vx, vy)))
+        act_wrap.reset()
         reward_w.reset(obs_dict)  
         if hasattr(agent, "ou_noise"):
             agent.ou_noise.reset()
@@ -163,20 +154,10 @@ def main():
                 act_norm = np.random.uniform(low=-1.0, high=1.0, size=(act_dim,)).astype(np.float32)
             else:
                 act_norm = agent.select_action(obs_vec_local, eval_mode=eval_mode)
-
-            
-
-        
-            # act_norm = agent.select_action(obs_vec_local, eval_mode=eval_mode)
-            
-            cur_speed = float(np.hypot(
-                float(obs_dict["linear_vels_x"][ego]),
-                float(obs_dict["linear_vels_y"][ego])
-            ))
                 
+            act_norm = np.clip(act_norm, -1, 1)
 
-
-            ego_action = act_wrap.build(act_norm, cur_speed=cur_speed)
+            ego_action = act_wrap.build(act_norm)
 
             opp = 1 - ego
             opp_scan = np.asarray(obs_dict["scans"][opp], dtype=np.float32)

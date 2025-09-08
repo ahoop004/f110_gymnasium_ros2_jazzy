@@ -66,7 +66,7 @@ env:
     - [2.0, 0.5, 0.0]                # opponent
 
   # Action bounds used by your env; keep speed forward-only to start.
-  action_low:  [-0.4189, -5.0]        # [steer_min(rad), speed_min(m/s)]
+  action_low:  [-0.4189, 0.0]        # [steer_min(rad), speed_min(m/s)]
   action_high: [ 0.4189, 20.0]        # [steer_max(rad), speed_max(m/s)]
 
   # LiDAR geometry used by env/bridge
@@ -86,7 +86,7 @@ action:
   train_action_noise_clip: 0.50
   # Target policy smoothing for TD3 (applied to target actions)
   policy_noise: 0.20
-  noise_clip: 0.50
+  noise_clip: 0.20
 
 
 td3:
