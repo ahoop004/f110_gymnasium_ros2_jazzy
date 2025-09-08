@@ -56,11 +56,12 @@ def main():
     map_bounds = get_map_bounds(cfg['env'].get('map_path')+'.yaml')
     lidar_max = cfg["obs"]["lidar_max"]
     obs_w = ObservationWrapper(lidar_max,map_bounds,action_high[1],
-    lidar_reduce_factor=6,)
+    lidar_reduce_factor=20,)
     
     
     reward_w = RewardWrapper()
 
+    max_steps = int(cfg["env"].get("max_steps", 5000))
 
     env = gym.make(
                 cfg["env"]["id"],
@@ -69,11 +70,11 @@ def main():
                 map=cfg["env"]["map"],
                 map_ext=cfg["env"]["map_ext"],
                 num_agents=int(cfg["env"]["num_agents"]),
+                max_steps=max_steps,
                 render_fps=30
             )
     
     
-    max_episode_steps = int(cfg["env"].get("max_episode_steps", 5000))
     
     
     # start_poses = cfg["env"].get("start_poses", None)
@@ -174,7 +175,7 @@ def main():
 
         agent.reset_action_state()
         
-        while not done and steps < max_episode_steps:
+        while not done and steps < max_steps:
 
             obs_vec_local = obs_w.build(obs_dict)
             
@@ -236,7 +237,7 @@ def main():
             # env.render()
 
 
-            if episode_ended or steps >= max_episode_steps:
+            if episode_ended or steps >= max_steps:
                 break
         
         # derive termination cause for logging

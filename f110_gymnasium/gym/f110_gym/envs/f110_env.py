@@ -106,6 +106,11 @@ class F110Env(gym.Env):
             self.seed = kwargs['seed']
         except:
             self.seed = 42
+            
+        try:
+            self.max_steps = kwargs['max_steps']
+        except:
+            self.max_steps = 5000
         try:
             self.map_name = kwargs['map']
             # different default maps
@@ -186,7 +191,8 @@ class F110Env(gym.Env):
         self.collisions = np.zeros((self.num_agents, ))
         # TODO: collision_idx not used yet
         # self.collision_idx = -1 * np.ones((self.num_agents, ))
-            
+        self.max_steps = int(kwargs.get('max_steps', 0))  # 0 = no limit
+        self._elapsed_steps = 0
 
         # loop completion
         self.near_start = True
@@ -371,6 +377,11 @@ class F110Env(gym.Env):
         terminated, toggle_list = self._check_done()
         truncated = False
         info = {'checkpoint_done': toggle_list}
+        
+        self._elapsed_steps += 1
+        truncated = False
+        if self.max_steps > 0 and self._elapsed_steps >= self.max_steps and not terminated:
+            truncated = True
 
         return obs, reward, terminated, truncated, info
 
@@ -389,6 +400,7 @@ class F110Env(gym.Env):
         """
         poses = options
         # reset counters and data members
+        self._elapsed_steps = 0
         self.current_time = 0.0
         self.collisions = np.zeros((self.num_agents, ))
         self.num_toggles = 0

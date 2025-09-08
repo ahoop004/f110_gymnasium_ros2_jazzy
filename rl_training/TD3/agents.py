@@ -1,22 +1,4 @@
-# agents.py
-# TD3 agent (MLP actor + twin critics) with PER support.
-# - Actor outputs normalized actions in [-1, 1]^act_dim.
-# - Action noise for exploration is added here (Option A).
-# - Target policy smoothing (policy_noise/noise_clip) for TD3 backups.
-# - PER: uses min(Q1,Q2) TD-error for priorities; critic loss is IS-weighted.
-#
-# Expected replay buffer API (PER-capable):
-#   add(s, a, r, s2, d, priority=None)
-#   sample(batch_size, beta) -> (batch, indices, is_weights)
-#       where batch is a dict with:
-#           'obs':      np.float32 [B, obs_dim]
-#           'actions':  np.float32 [B, act_dim]   (normalized actions in [-1,1])
-#           'rewards':  np.float32 [B, 1] or [B]
-#           'next_obs': np.float32 [B, obs_dim]
-#           'dones':    np.float32 [B, 1] or [B]  (1.0 if terminal else 0.0)
-#   update_priorities(indices, new_priorities: np.ndarray)
-#
-# NOTE: Store *normalized* actions in replay. Mapping to env units is handled elsewhere.
+
 
 from __future__ import annotations
 from dataclasses import dataclass
@@ -91,8 +73,8 @@ class TD3Agent:
         cfg: Optional[TD3Config] = None,
         device: Optional[torch.device] = "cpu",
     ) -> None:
-        self.device = device 
-        # self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # self.device = device 
+        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.obs_dim = int(obs_dim)
         self.act_dim = int(act_dim)
         self.cfg = cfg or TD3Config()
