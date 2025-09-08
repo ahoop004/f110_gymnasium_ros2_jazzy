@@ -4,34 +4,47 @@ from collections import deque
 
 class RewardWrapper:
     """
-    Minimal reward shaping for 'make opp crash, stay safe':
-      r = + crash_opp_bonus (only when opp newly crashes and ego didn't)
-          - crash_ego_penalty (if ego crashed)
-          + progress_gain * forward_progress_m
-          - reverse_gain  * backward_progress_m
-          - alive_cost
-          - spin_penalty (if large yaw change while barely moving)
-          - no_progress_penalty (if little forward progress over a short window)
+    Goal: make the opp crash while keeping ego safe & stable.
 
-    Assumes exactly 2 agents; opponent index = 1 - ego_idx.
+    Terms:
+      + crash_opp_bonus   (ONLY if opp newly crashes AND ego was recently close)
+      - crash_ego_penalty (once, when ego crashes)
+      + progress_gain * forward_progress_m
+      - reverse_gain  * backward_progress_m
+      - alive_cost
+      - spin_penalty (large yaw change while barely moving)
+      - steer_speed_lambda * |steer_norm| * |speed_norm|     [stability]
+      - lambda_dsteer * |Δ steer_norm| (between steps)       [smoothness]
     """
 
     def __init__(
+        # Core weights
         self,
-        alive_cost: float = 0.005,        # per-step time cost
-        crash_ego_penalty: float = -120.0,
-        crash_opp_bonus: float = 100.0,   # paid once at new opp crash event
-        progress_gain: float = 10.0,      # per meter (forward)
-        reverse_gain: float = 5.0,       # per meter (backwards)
-        # stagnation detector
-        no_progress_window: int = 15,    # steps
-        no_progress_eps: float = 0.10,   # meters forward within window
-        no_progress_penalty: float = -6.0,
-    
-        spin_yaw_thresh: float = 0.20,   # rad per step (~11.5°)
-        spin_move_eps: float = 0.01,     # m per step considered "not moving"
+        alive_cost: float = 0.002,
+        crash_ego_penalty: float = -60.0,   # start mild; raise to -120 once stable
+        crash_opp_bonus: float = 100.0,
+        progress_gain: float = 10.0,
+        reverse_gain: float = 5.0,
+
+        # Stagnation detector
+        no_progress_window: int = 10,
+        no_progress_eps: float = 0.15,
+        no_progress_penalty: float = -3.0,
+
+        # Spin deterrent
+        spin_yaw_thresh: float = 0.20,  # rad/step
+        spin_move_eps: float = 0.01,    # m/step
         spin_penalty: float = -0.5,
+
+        # Causal gate for opp crash
+        cause_window: int = 12,         # steps to look back
+        cause_dist_thresh: float = 2.2, # meters (min recent ego–opp distance)
+
+        # Stability terms (normalized action space: [-1,1]^2)
+        steer_speed_lambda: float = 0.05,  # |steer|*|speed| cost
+        lambda_dsteer: float = 0.01,       # |Δ steer| cost between steps
     ):
+        # Store weights
         self.alive_cost = float(alive_cost)
         self.crash_ego_penalty = float(crash_ego_penalty)
         self.crash_opp_bonus = float(crash_opp_bonus)
@@ -46,10 +59,18 @@ class RewardWrapper:
         self.spin_move_eps = float(spin_move_eps)
         self.spin_penalty = float(spin_penalty)
 
+        self.cause_window = int(cause_window)
+        self.cause_dist_thresh = float(cause_dist_thresh)
+
+        self.steer_speed_lambda = float(steer_speed_lambda)
+        self.lambda_dsteer = float(lambda_dsteer)
+
         # Internal state
-        self._prev_pose = None                # (x, y, theta)
+        self._prev_pose = None                 # (x, y, theta)
         self._prev_collisions = None          # np.array([ego, opp])
+        self._prev_act = None                 # last normalized action
         self._ds_hist = deque(maxlen=self.no_progress_window)
+        self._dist_hist = deque(maxlen=self.cause_window)  # recent ego–opp dists
         self.opp_crashed_now = False
 
     # ---- Public API ----
@@ -68,19 +89,37 @@ class RewardWrapper:
         except Exception:
             self._prev_collisions = None
 
+        self._prev_act = None
         self._ds_hist.clear()
+        self._dist_hist.clear()
+        # seed distance history if possible
+        try:
+            opp = 1 - ego
+            xo = float(observations["poses_x"][opp])
+            yo = float(observations["poses_y"][opp])
+            self._dist_hist.append(self._euclid(x, y, xo, yo))
+        except Exception:
+            pass
+
         self.opp_crashed_now = False
 
     def compute(self, observations: dict, action=None) -> float:
         ego = int(observations["ego_idx"])
-        opp = 1 - ego  # 2-agent assumption
+        opp = 1 - ego
 
         x = float(observations["poses_x"][ego])
         y = float(observations["poses_y"][ego])
         th = float(observations["poses_theta"][ego])
         self.opp_crashed_now = False
 
-        # Collisions array
+        # Opp pose + distance (for causal gate)
+        xo = float(observations["poses_x"][opp])
+        yo = float(observations["poses_y"][opp])
+        d_ego_opp = self._euclid(x, y, xo, yo)
+        self._dist_hist.append(d_ego_opp)
+        recent_min_dist = min(self._dist_hist) if self._dist_hist else float("inf")
+
+        # Collisions
         try:
             curr_col = np.asarray(observations["collisions"], dtype=np.int8)
             if curr_col.ndim == 0:
@@ -92,15 +131,12 @@ class RewardWrapper:
 
         # 1) Crash terms
         ego_crash = bool(curr_col[ego]) if curr_col is not None else False
-        opp_crash = bool(curr_col[opp]) if curr_col is not None else False
 
-        # Pay bonus only on NEW opp crash events, and only if ego didn't crash
+        new_opp_crash = False
         if self._prev_collisions is not None and curr_col is not None:
             new_opp_crash = (curr_col[opp] == 1 and self._prev_collisions[opp] == 0)
-        else:
-            new_opp_crash = False
 
-        if new_opp_crash and not ego_crash:
+        if new_opp_crash and not ego_crash and (recent_min_dist <= self.cause_dist_thresh):
             total += self.crash_opp_bonus
             self.opp_crashed_now = True
 
@@ -114,9 +150,9 @@ class RewardWrapper:
             x0, y0, th0 = self._prev_pose
             dx, dy = x - x0, y - y0
             ux, uy = math.cos(th0), math.sin(th0)
-            ds = dx * ux + dy * uy  # signed: +forward, -reverse
+            ds = dx * ux + dy * uy        # signed: +forward, -reverse
             dth = self._angle_diff(th, th0)
-        # Reward forward; penalize reverse
+
         if ds > 0.0:
             total += self.progress_gain * ds
         elif ds < 0.0:
@@ -126,10 +162,23 @@ class RewardWrapper:
         if abs(dth) >= self.spin_yaw_thresh and abs(ds) <= self.spin_move_eps:
             total += self.spin_penalty
 
-        # 4) Time cost (prevents sitting still)
+        # 4) Stability terms (normalized action space)
+        if action is not None and len(action) >= 2:
+            # clamp defensively
+            steer_n = float(np.clip(action[0], -1.0, 1.0))
+            speed_n = float(np.clip(action[1], -1.0, 1.0))
+            # high-speed oversteer deterrent
+            total -= self.steer_speed_lambda * abs(steer_n) * abs(speed_n)
+            # smoothness: penalize rapid steer changes
+            if self._prev_act is not None:
+                dsteer = steer_n - float(self._prev_act[0])
+                total -= self.lambda_dsteer * abs(dsteer)
+            self._prev_act = np.array(action, dtype=np.float32)
+
+        # 5) Time cost
         total -= self.alive_cost
 
-        # 5) No-progress penalty over a short window (prevents dithering)
+        # 6) No-progress penalty window
         self._ds_hist.append(ds)
         if self.no_progress_penalty != 0.0 and len(self._ds_hist) == self._ds_hist.maxlen:
             recent_forward = sum(max(v, 0.0) for v in self._ds_hist)
@@ -137,7 +186,7 @@ class RewardWrapper:
                 total += self.no_progress_penalty
                 self._ds_hist.clear()
 
-        # Update internal state
+        # Update internals
         self._prev_pose = (x, y, th)
         if curr_col is not None:
             self._prev_collisions = curr_col.copy()
@@ -150,3 +199,7 @@ class RewardWrapper:
         """Return signed smallest angle difference a-b in [-pi, pi]."""
         d = (a - b + math.pi) % (2.0 * math.pi) - math.pi
         return d
+
+    @staticmethod
+    def _euclid(x1: float, y1: float, x2: float, y2: float) -> float:
+        return math.hypot(x2 - x1, y2 - y1)

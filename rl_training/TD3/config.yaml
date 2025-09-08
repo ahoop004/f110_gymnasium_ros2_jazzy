@@ -145,11 +145,11 @@ obs:
 
 action:
   # Exploration noise on actor output before mapping to env bounds
-  train_action_noise_std: 0.07       # in normalized [-1,1] space
-  train_action_noise_clip: 0.20
+  train_action_noise_std: 0.03       # in normalized [-1,1] space
+  train_action_noise_clip: 0.15
   # Target policy smoothing for TD3 (applied to target actions)
   policy_noise: 0.10
-  noise_clip: 0.20
+  noise_clip: 0.10
 
 
 td3:
@@ -174,7 +174,7 @@ train:
   total_steps: 1000000
   warmup_steps: 10000
   update_after: 1000
-  batch_size: 64
+  batch_size: 256
   updates_per_step: 1
   eval_every_steps: 10000
   save_every_steps: 50000
