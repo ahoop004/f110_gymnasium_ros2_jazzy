@@ -62,12 +62,43 @@ env:
   # Start poses for [ego, opp] as [x, y, yaw] in meters/radians.
   # Replace with your track-specific values.
   start_poses:
-    - [0.0, 0.0, 0.0]                # ego
-    - [2.0, 0.5, 0.0]                # opponent
+    - - [0.0, 0.0, 0.0]    # ego
+      - [2.0, 0.5, 0.0]    # opp
+    - - [0.0, 0.0, 0.0]
+      - [3.0,-0.3, 0.0]
+    - - [0.0, 0.0, 0.0]
+      - [4.0, 0.0, 0.0]
+    - - [0.0, 0.5, 0.0]
+      - [2.5,-0.3, 0.0]
+    - - [0.0,-0.3, 0.0]
+      - [2.5, 0.5, 0.0]
+    - - [0.0, 0.0, 0.0]
+      - [3.0, 0.0, 0.26]
+    - - [0.0, 0.0, 0.0]
+      - [3.0, 0.0,-0.26]
+    - - [0.0, 0.0, 0.0]
+      - [4.0, 1.0, 0.17]
+    - - [0.0, 0.0, 0.0]
+      - [4.0,-0.1,-0.17]
+    - - [0.0, 0.0, 0.17]
+      - [3.0, 0.0, 0.0]
+    - - [0.0, 0.0,-0.17]
+      - [3.0, 0.0, 0.0]
+    - - [0.0, 0.0, 0.0]
+      - [6.0, 0.0, 0.0]
+    - - [0.0, 0.0, 0.0]
+      - [5.5, 0.5, 0.0]
+    - - [0.0, 0.0, 0.0]
+      - [-2.0, 0.0, 0.0]
+    - - [0.0, 0.0, 0.0]
+      - [-3.0, 0.5, 0.0]
+    - - [0.0, 0.0, 0.0]
+      - [-4.0,-0.3, 0.0]
+
 
   # Action bounds used by your env; keep speed forward-only to start.
   action_low:  [-0.4189, 0.0]        # [steer_min(rad), speed_min(m/s)]
-  action_high: [ 0.4189, 20.0]        # [steer_max(rad), speed_max(m/s)]
+  action_high: [ 0.4189, 8.0]        # [steer_max(rad), speed_max(m/s)]
 
   # LiDAR geometry used by env/bridge
   lidar:
@@ -82,10 +113,10 @@ obs:
 
 action:
   # Exploration noise on actor output before mapping to env bounds
-  train_action_noise_std: 0.10       # in normalized [-1,1] space
-  train_action_noise_clip: 0.50
+  train_action_noise_std: 0.07       # in normalized [-1,1] space
+  train_action_noise_clip: 0.20
   # Target policy smoothing for TD3 (applied to target actions)
-  policy_noise: 0.20
+  policy_noise: 0.10
   noise_clip: 0.20
 
 
@@ -95,7 +126,7 @@ td3:
   gamma: 0.99
   tau: 0.005
   actor_lr: 3.0e-4
-  critic_lr: 1.0e-4
+  critic_lr: 3.0e-4
   policy_freq: 2
   # (policy_noise/noise_clip are in action: they’re also used in the agent)
 

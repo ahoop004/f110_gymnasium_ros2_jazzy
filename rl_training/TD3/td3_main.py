@@ -5,6 +5,9 @@ import os
 import argparse
 import random
 from typing import Optional, Tuple
+import random
+from collections import deque
+import math
 
 import numpy as np
 import torch
@@ -74,9 +77,15 @@ def main():
     max_episode_steps = int(cfg["env"].get("max_episode_steps", 5000))
     
     
-    start_poses = cfg["env"].get("start_poses", None)
-    if start_poses is not None:
-        start_poses = np.array(start_poses, dtype=np.float32)
+    # start_poses = cfg["env"].get("start_poses", None)
+    # if start_poses is not None:
+    #     start_poses = np.array(start_poses, dtype=np.float32)
+    all_start_poses = cfg["env"].get("start_poses", None)
+    if all_start_poses is not None:
+        ego_pose, opp_pose = random.choice(all_start_poses)
+        start_poses = np.array([ego_pose, opp_pose], dtype=np.float32)
+    else:
+        start_poses = None
 
 
     obs_dict, info = env.reset(seed=seed,options=start_poses)
@@ -128,8 +137,17 @@ def main():
     global_steps = 0
     episode = 0
     best_eval_return = -1e9
+    
+    # --- logging state ---
+    train_ret_hist = deque(maxlen=100)   # MA-100 of train returns
+    ema_ret: Optional[float] = None      # EMA of train returns
+    EMA_ALPHA = 0.05                     # ~smooth over ~1/alpha steps
+    term_counts = {"opp_crash": 0, "ego_crash": 0, "timeout": 0}
 
-    def run_episode(eval_mode: bool = False) -> Tuple[float, int]:
+    def _ema_update(x: float, ema: Optional[float], alpha: float) -> float:
+        return x if ema is None else (alpha * x + (1.0 - alpha) * ema)
+
+    def run_episode(eval_mode: bool = False) -> Tuple[float, int, dict]:
         nonlocal global_steps, episode
 
         total_r = 0.0
@@ -137,6 +155,12 @@ def main():
         done = False
         terminated = False
         truncated = False
+        avg_speed_acc = 0.0
+        if all_start_poses is not None:
+            ego_pose, opp_pose = random.choice(all_start_poses)
+            start_poses = np.array([ego_pose, opp_pose], dtype=np.float32)
+        else:
+            start_poses = None
         
         obs_dict, _ = env.reset(options=start_poses)
         ego = int(obs_dict["ego_idx"])
@@ -158,6 +182,7 @@ def main():
             act_norm = np.clip(act_norm, -1, 1)
 
             ego_action = act_wrap.build(act_norm)
+            avg_speed_acc += float(ego_action[1])
 
             opp = 1 - ego
             opp_scan = np.asarray(obs_dict["scans"][opp], dtype=np.float32)
@@ -177,8 +202,14 @@ def main():
             next_obs_vec = obs_w.build(next_obs_dict)
 
             r = reward_w.compute(next_obs_dict,act_norm)
-            if truncated and not terminated:     # timed out
-                r += -15.0 
+            if getattr(reward_w, "opp_crashed_now", False):
+                done_for_td = True           # terminal for replay/bootstrapping
+                done = True                  # end the control loop
+                truncated = False            # not a timeout
+                terminated = True            # mark as terminal transition
+                # print("Crash", start_poses[1])
+            elif truncated and not terminated:  # timed out (no crash)
+                r += -15.0
 
             if not eval_mode:
                 buffer.add(obs_vec_local, act_norm, r, next_obs_vec, done_for_td)
@@ -199,19 +230,41 @@ def main():
 
             if episode_ended or steps >= max_episode_steps:
                 break
+        
+        # derive termination cause for logging
+        if getattr(reward_w, "opp_crashed_now", False):
+            term = "opp_crash"
+        elif terminated:
+            term = "ego_crash"
+        elif truncated:
+            term = "timeout"
+        else:
+            term = "unknown"
 
-        return total_r, steps
+        metrics = {
+            "term": term,
+            "avg_speed": (avg_speed_acc / max(1, steps)),
+        }
+        return total_r, steps, metrics
+
+        # return total_r, steps
 
     # --- Training loop
     print("[TD3] Starting training...")
     while episode < 5000:
         episode += 1
-        ep_ret, ep_steps = run_episode(eval_mode=False)
+        ep_ret, ep_steps, m = run_episode(eval_mode=False)
+        train_ret_hist.append(ep_ret)
+        ema_ret = _ema_update(ep_ret, ema_ret, EMA_ALPHA)
+        term_counts[m["term"]] = term_counts.get(m["term"], 0) + 1
+
+        ma100 = float(np.mean(train_ret_hist)) if len(train_ret_hist) > 0 else ep_ret
+        ema_disp = ema_ret if ema_ret is not None else ep_ret
 
         if episode % 20 == 0:
             # Just crossed an eval boundary: run one eval episode
             
-            eval_ret, eval_steps = run_episode(eval_mode=True)
+            eval_ret, eval_steps, _ = run_episode(eval_mode=True)
             
 
             # Save best
@@ -224,7 +277,11 @@ def main():
             print(f"[EVAL] ret={eval_ret:.3f} steps={eval_steps} best={best_eval_return:.3f}")
 
 
-        print(f"Ep {episode:04d} [TRAIN] | R: {ep_ret:.2f} | steps: {ep_steps} | buf: {len(buffer)} | gstep: {global_steps}")
+        print(
+            f"Ep {episode:04d} [TRAIN] | "
+            f"R: {ep_ret:.2f} | MA100: {ma100:.2f} | EMA: {ema_disp:.2f} | "
+            f"steps: {ep_steps} | term: {m['term']} | avg_v: {m['avg_speed']:.2f}"
+        )
 
 
     env.close()

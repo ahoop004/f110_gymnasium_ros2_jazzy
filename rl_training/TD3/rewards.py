@@ -20,14 +20,14 @@ class RewardWrapper:
         self,
         alive_cost: float = 0.005,        # per-step time cost
         crash_ego_penalty: float = -20.0,
-        crash_opp_bonus: float = 50.0,   # paid once at new opp crash event
+        crash_opp_bonus: float = 100.0,   # paid once at new opp crash event
         progress_gain: float = 10.0,      # per meter (forward)
         reverse_gain: float = 5.0,       # per meter (backwards)
         # stagnation detector
         no_progress_window: int = 15,    # steps
         no_progress_eps: float = 0.10,   # meters forward within window
         no_progress_penalty: float = -6.0,
-        # spin deterrent (large |Δθ| at tiny translation)
+    
         spin_yaw_thresh: float = 0.20,   # rad per step (~11.5°)
         spin_move_eps: float = 0.01,     # m per step considered "not moving"
         spin_penalty: float = -0.5,
@@ -50,6 +50,7 @@ class RewardWrapper:
         self._prev_pose = None                # (x, y, theta)
         self._prev_collisions = None          # np.array([ego, opp])
         self._ds_hist = deque(maxlen=self.no_progress_window)
+        self.opp_crashed_now = False
 
     # ---- Public API ----
     def reset(self, observations: dict) -> None:
@@ -68,6 +69,7 @@ class RewardWrapper:
             self._prev_collisions = None
 
         self._ds_hist.clear()
+        self.opp_crashed_now = False
 
     def compute(self, observations: dict, action=None) -> float:
         ego = int(observations["ego_idx"])
@@ -76,6 +78,7 @@ class RewardWrapper:
         x = float(observations["poses_x"][ego])
         y = float(observations["poses_y"][ego])
         th = float(observations["poses_theta"][ego])
+        self.opp_crashed_now = False
 
         # Collisions array
         try:
@@ -99,6 +102,7 @@ class RewardWrapper:
 
         if new_opp_crash and not ego_crash:
             total += self.crash_opp_bonus
+            self.opp_crashed_now = True
 
         if ego_crash:
             total += self.crash_ego_penalty
