@@ -264,7 +264,7 @@ def main():
         term_counts[m["term"]] = term_counts.get(m["term"], 0) + 1
 
 
-        if episode % 20 == 0:
+        if episode % 1000 == 0:
             eval_rets, eval_steps_list = [], []
             for _ in range(3):
                 er, es, _ = run_episode(eval_mode=True)
