@@ -65,12 +65,12 @@ def main():
 
     env = gym.make(
                 cfg["env"]["id"],
+                max_steps=max_steps,
                 render_mode=cfg["env"].get("render_mode", None),
                 map_dir=cfg["env"]["map_dir"],
                 map=cfg["env"]["map"],
                 map_ext=cfg["env"]["map_ext"],
                 num_agents=int(cfg["env"]["num_agents"]),
-                max_steps=max_steps,
                 render_fps=30
             )
     
@@ -140,12 +140,9 @@ def main():
     
     # --- logging state ---
     train_ret_hist = deque(maxlen=100)   # MA-100 of train returns
-    ema_ret: Optional[float] = None      # EMA of train returns
-    EMA_ALPHA = 0.05                     # ~smooth over ~1/alpha steps
+
     term_counts = {"opp_crash": 0, "ego_crash": 0, "timeout": 0}
 
-    def _ema_update(x: float, ema: Optional[float], alpha: float) -> float:
-        return x if ema is None else (alpha * x + (1.0 - alpha) * ema)
 
     def run_episode(eval_mode: bool = False) -> Tuple[float, int, dict]:
         nonlocal global_steps, episode
@@ -155,11 +152,10 @@ def main():
         done = False
         terminated = False
         truncated = False
-        avg_speed_acc = 0.0
+        
         large_steer_cnt = 0
         idle_cnt = 0
-        STEER_THRESH = 0.35   # rad, ~20°
-        IDLE_SPEED  = 0.50    # m/s
+     
         
         
         if all_start_poses is not None:
@@ -187,11 +183,7 @@ def main():
             act_norm = np.clip(act_norm, -1, 1)
 
             ego_action = act_wrap.build(act_norm)
-            avg_speed_acc += float(ego_action[1])
-            if abs(float(ego_action[0])) > STEER_THRESH:
-                large_steer_cnt += 1
-            if float(ego_action[1]) < IDLE_SPEED:
-                idle_cnt += 1
+         
 
             opp = 1 - ego
             opp_scan = np.asarray(obs_dict["scans"][opp], dtype=np.float32)
@@ -218,7 +210,7 @@ def main():
                 terminated = True            # mark as terminal transition
                 # print("Crash", start_poses[1])
             elif truncated and not terminated:  # timed out (no crash)
-                r += -15.0
+                r += -0.6
 
             if not eval_mode:
                 buffer.add(obs_vec_local, act_norm, r, next_obs_vec, done_for_td)
@@ -252,25 +244,25 @@ def main():
 
         metrics = {
             "term": term,
-            "avg_speed": (avg_speed_acc / max(1, steps)),
             "pct_large_steer": (100.0 * large_steer_cnt / max(1, steps)),
             "pct_idle": (100.0 * idle_cnt / max(1, steps)),
         }
         return total_r, steps, metrics
 
-        # return total_r, steps
+
 
     # --- Training loop
     print("[TD3] Starting training...")
-    while episode < 5000:
+    sr10 = deque(maxlen=10)
+    sr100 = deque(maxlen=100)
+    while episode < 10000:
+      
         episode += 1
         ep_ret, ep_steps, m = run_episode(eval_mode=False)
         train_ret_hist.append(ep_ret)
-        ema_ret = _ema_update(ep_ret, ema_ret, EMA_ALPHA)
+       
         term_counts[m["term"]] = term_counts.get(m["term"], 0) + 1
 
-        ma100 = float(np.mean(train_ret_hist)) if len(train_ret_hist) > 0 else ep_ret
-        ema_disp = ema_ret if ema_ret is not None else ep_ret
 
         if episode % 20 == 0:
             eval_rets, eval_steps_list = [], []
@@ -280,9 +272,6 @@ def main():
             eval_ret = float(np.mean(eval_rets))
             eval_steps = int(np.mean(eval_steps_list))
             
-            # eval_ret, eval_steps, _ = run_episode(eval_mode=True)
-            
-
             # Save best
             if eval_ret > best_eval_return:
                 best_eval_return = eval_ret
@@ -293,20 +282,11 @@ def main():
             print(f"[EVAL] ret={eval_ret:.3f} steps={eval_steps} best={best_eval_return:.3f}")
 
 
-        print(
-            f"Ep {episode:04d} [TRAIN] | "
-            f"R: {ep_ret:.2f} | MA100: {ma100:.2f} | EMA: {ema_disp:.2f} | "
-            f"steps: {ep_steps} | term: {m['term']} | avg_v: {m['avg_speed']:.2f}"
-            f"%|steer|>0.35: {m['pct_large_steer']:.1f} | %idle<0.5: {m['pct_idle']:.1f}"
-        )
+        sr10.append(1 if m["term"] == "opp_crash" else 0)
+        sr100.append(1 if m["term"] == "opp_crash" else 0)
+        print(f"Ep {episode:04d} [TRAIN] | R: {ep_ret:.2f} | steps: {ep_steps} | term: {m['term']} "
+            f"| SR@10: {100*sum(sr10)/max(1,len(sr10)):.0f}% SR@100: {100*sum(sr100)/max(1,len(sr100)):.0f}%")
         
-        if episode % 100 == 0:
-            tot = sum(term_counts.values()) or 1
-            oppp = 100.0 * term_counts.get("opp_crash", 0) / tot
-            egop = 100.0 * term_counts.get("ego_crash", 0) / tot
-            timep = 100.0 * term_counts.get("timeout",   0) / tot
-            print(f"[TERMS last {tot}] opp:{oppp:.1f}% ego:{egop:.1f}% timeout:{timep:.1f}%")
-            term_counts = {"opp_crash": 0, "ego_crash": 0, "timeout": 0}  # reset window
 
 
     env.close()
