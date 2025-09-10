@@ -2,12 +2,6 @@ import numpy as np
 import math
 
 class ObservationWrapper:
-    """
-    Minimal LiDAR→vector builder with fixed subsampling and a small tail:
-      [reduced_lidar_norm, ex_n, ey_n, et_n, ego_speed_n, ego_crashed,
-                             ox_n, oy_n, ot_n, opp_speed_n, opp_crashed]
-    Assumes exactly 2 agents (ego + opponent).
-    """
 
     def __init__(self, lidar_max_range: float, bounds: dict, vel_max: float = 20.0, lidar_reduce_factor: int = 6):
         # Basic checks
@@ -40,19 +34,13 @@ class ObservationWrapper:
         return scan[::self.lidar_reduce_factor].astype(np.float32, copy=False)
 
     def build(self, observations: dict) -> np.ndarray:
-        """
-        Expects keys:
-          'ego_idx','scans','poses_x','poses_y','poses_theta',
-          'linear_vels_x','linear_vels_y','collisions'
-        """
+
         ego = int(observations["ego_idx"])
 
         scans      = np.asarray(observations["scans"], dtype=np.float32)
         poses_x    = np.asarray(observations["poses_x"], dtype=np.float32)
         poses_y    = np.asarray(observations["poses_y"], dtype=np.float32)
         poses_th   = np.asarray(observations["poses_theta"], dtype=np.float32)
-        # vxs        = np.asarray(observations["linear_vels_x"], dtype=np.float32)
-        # vys        = np.asarray(observations["linear_vels_y"], dtype=np.float32)
         collisions = np.asarray(observations["collisions"], dtype=np.float32)
 
         if scans.ndim != 2:
@@ -74,14 +62,10 @@ class ObservationWrapper:
 
         # Ego kinematics
         ex = float(poses_x[ego]); ey = float(poses_y[ego]); et = float(poses_th[ego])
-        # vx = float(vxs[ego]);     vy = float(vys[ego])
-        # ego_speed_n = np.clip(np.hypot(vx, vy) / self.vel_max, 0.0, 1.0)
         ego_crashed = float(collisions[ego])
 
         # Opponent kinematics
         ox = float(poses_x[opp]); oy = float(poses_y[opp]); ot = float(poses_th[opp])
-        # ovx = float(vxs[opp]);    ovy = float(vys[opp])
-        # opp_speed_n = np.clip(np.hypot(ovx, ovy) / self.vel_max, 0.0, 1.0)
         opp_crashed = float(collisions[opp])
 
         # Normalize positions to [-1,1]
@@ -100,4 +84,3 @@ class ObservationWrapper:
             dtype=np.float32,
         )
         return np.concatenate([lidar, tail], axis=0).astype(np.float32, copy=False)
-        # return tail

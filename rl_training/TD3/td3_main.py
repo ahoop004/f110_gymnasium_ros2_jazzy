@@ -210,7 +210,7 @@ def main():
                 terminated = True            # mark as terminal transition
                 # print("Crash", start_poses[1])
             elif truncated and not terminated:  # timed out (no crash)
-                r += -0.6
+                r += -1.0
 
             if not eval_mode:
                 buffer.add(obs_vec_local, act_norm, r, next_obs_vec, done_for_td)

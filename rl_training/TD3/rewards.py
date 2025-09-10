@@ -113,7 +113,7 @@ class RewardWrapper:
         self.opp_crashed_now = bool(new_opp_crash and not ego_crash)
         
         if ego_crash:
-            r = -0.5 
+            r = -0.7 
 
         # update prev collisions
         self._prev_collisions = curr_col.copy()

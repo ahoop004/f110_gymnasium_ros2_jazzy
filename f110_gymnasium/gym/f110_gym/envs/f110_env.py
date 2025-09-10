@@ -154,7 +154,7 @@ class F110Env(gym.Env):
 
         # simulation parameters
         try:
-            self.num_agents = int(kwargs['num_agents'])
+            self.num_agents = kwargs['num_agents']
         except:
             self.num_agents = 2
 
@@ -191,7 +191,7 @@ class F110Env(gym.Env):
         self.collisions = np.zeros((self.num_agents, ))
         # TODO: collision_idx not used yet
         # self.collision_idx = -1 * np.ones((self.num_agents, ))
-        # self.max_steps = int(kwargs.get('max_steps', 0))  # 0 = no limit
+        self.max_steps = int(kwargs.get('max_steps', 0))  # 0 = no limit
         self._elapsed_steps = 0
 
         # loop completion
@@ -229,32 +229,25 @@ class F110Env(gym.Env):
 
         # stateful observations for rendering
         self.render_obs = None
-        # single_action_space = spaces.Box(
-        #     low=np.array([self.params['s_min'], self.params['v_min']], dtype=np.float32),
-        #     high=np.array([self.params['s_max'], self.params['v_max']], dtype=np.float32),
-        #     dtype=np.float32
-        # )
-        # self.action_space = spaces.Tuple((single_action_space, single_action_space))
-        
-        
-        # scan_space = spaces.Box(low=0.0, high=30.0, shape=(1080,), dtype=np.float32)
-        # pose_space = spaces.Box(
-        #     low=np.array([x_min, y_min, -np.pi], dtype=np.float32),
-        #     high=np.array([x_max, y_max, np.pi], dtype=np.float32),
-        #     dtype=np.float32
-        # )
-        # agent_obs_space = spaces.Dict({
-        #     'scan': scan_space,
-        #     'pose': pose_space,
-        #     'collision': spaces.Discrete(2),
-        # })
-        
-        self.action_space = spaces.Box(
-            low=np.array([self.params['s_min'], self.params['v_min']], dtype=np.float32).reshape(1, 2).repeat(self.num_agents, axis=0),
-            high=np.array([self.params['s_max'], self.params['v_max']], dtype=np.float32).reshape(1, 2).repeat(self.num_agents, axis=0),
-            shape=(self.num_agents, 2),
+        single_action_space = spaces.Box(
+            low=np.array([self.params['s_min'], self.params['v_min']], dtype=np.float32),
+            high=np.array([self.params['s_max'], self.params['v_max']], dtype=np.float32),
             dtype=np.float32
         )
+        self.action_space = spaces.Tuple((single_action_space, single_action_space))
+        
+        
+        scan_space = spaces.Box(low=0.0, high=30.0, shape=(1080,), dtype=np.float32)
+        pose_space = spaces.Box(
+            low=np.array([x_min, y_min, -np.pi], dtype=np.float32),
+            high=np.array([x_max, y_max, np.pi], dtype=np.float32),
+            dtype=np.float32
+        )
+        agent_obs_space = spaces.Dict({
+            'scan': scan_space,
+            'pose': pose_space,
+            'collision': spaces.Discrete(2),
+        })
         
         spaces_dict_obs = spaces.Dict({
             'ego_idx': spaces.Discrete(self.num_agents),
@@ -322,8 +315,7 @@ class F110Env(gym.Env):
             if self.toggle_list[i] < 4:
                 self.lap_times[i] = self.current_time
         
-        # done = (self.collisions[self.ego_idx]) or np.all(self.toggle_list >= 4)
-        done = bool(self.collisions[self.ego_idx]) or bool(np.all(self.toggle_list >= 4))
+        done = (self.collisions[self.ego_idx]) or np.all(self.toggle_list >= 4)
         
         return bool(done), self.toggle_list >= 4
 
@@ -357,18 +349,7 @@ class F110Env(gym.Env):
         """
         
         # call simulation step
-        # obs = self.sim.step(action)
-        # ---- Validate/reshape action ----
-        act = np.asarray(action, dtype=np.float32)
-        if act.ndim == 1 and act.size == 2 * self.num_agents:
-            act = act.reshape(self.num_agents, 2)
-        if act.shape != (self.num_agents, 2):
-            raise error.Error(f"Expected action shape {(self.num_agents, 2)}, got {act.shape}")
-        # clip to action space just in case
-        act = np.clip(act, self.action_space.low, self.action_space.high)
-
-        # call simulation step
-        obs = self.sim.step(act)
+        obs = self.sim.step(action)
         
         obs['lap_times'] = self.lap_times
         obs['lap_counts'] = self.lap_counts
@@ -437,8 +418,8 @@ class F110Env(gym.Env):
         self.sim.reset(poses)
 
         # get no input observations
-        zero_action = np.zeros((self.num_agents, 2), dtype=np.float32)
-        obs, reward, terminated, truncated, info = self.step(zero_action)
+        action = np.zeros((self.num_agents, 2))
+        obs, reward, terminated, truncated, info = self.step(action)
 
         self.render_obs = {
             'ego_idx': obs['ego_idx'],
