@@ -87,7 +87,7 @@ def generate_launch_description():
 
         nodes = [rviz_node, bridge_node, nav_lifecycle_node, map_server_node, ego_robot_publisher]
 
-        # --- Ego controller: GAP-FOLLOW (for testing) or RL (later)
+        # --- Ego controller: GAP-FOLLOW, RL (legacy), or PPO (SB3 attacker)
         if ego_ctrl == 'gap_follow':
             nodes.append(Node(
                 package='gap_follow',
@@ -103,8 +103,14 @@ def generate_launch_description():
                 namespace=ego_ns,
                 name='rl_car_controller',
                 parameters=[{'use_sim_time': True}],
-                # If your RL node needs a path, pass it:
-                # arguments: ['--config', cfg_path],
+            ))
+        elif ego_ctrl == 'ppo':
+            nodes.append(Node(
+                package='rl_car_controller',
+                executable='rl_agent_node',
+                namespace=ego_ns,
+                name='ppo_attacker',
+                parameters=[{'use_sim_time': True}],
             ))
 
         # --- Opponent controller (only if num_agent > 1)
@@ -123,7 +129,7 @@ def generate_launch_description():
             if opp_ctrl == 'gap_follow':
                 nodes.append(Node(
                     package='opp_gap',
-                    executable='opp_reactive_node',
+                    executable='opp_reactive_node.py',
                     namespace=opp_ns,
                     name='opp_gap',
                     parameters=[{'use_sim_time': True}],

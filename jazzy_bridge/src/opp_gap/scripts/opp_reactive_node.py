@@ -1,77 +1,136 @@
+#!/usr/bin/env python3
+"""Opponent FTG controller node using FollowTheGapPolicy from training."""
+
+import os
+import yaml
+import numpy as np
+
 import rclpy
 from rclpy.node import Node
-
-import numpy as np
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import LaserScan
-from ackermann_msgs.msg import AckermannDriveStamped, AckermannDrive
+from nav_msgs.msg import Odometry
+from ackermann_msgs.msg import AckermannDriveStamped
 
-class ReactiveFollowGap(Node):
-    """ 
-    Implement Wall Following on the car
-    """
+from opp_gap.ftg import FollowTheGapPolicy
+
+
+# Default FTG params matching ftg_max.yaml from training
+DEFAULT_FTG_PARAMS = {
+    'max_distance': 10.0,
+    'window_size': 4,
+    'bubble_radius': 4.5,
+    'max_steer': 0.42,
+    'min_speed': 0.2,
+    'max_speed': 0.95,
+    'steering_gain': 0.8,
+    'fov': 4.71238898,
+    'normalized': False,
+    'steer_smooth': 0.6,
+    'mode': 'lidar',
+    'gap_min_range': 0.4,
+    'target_mode': 'center',
+    'wall_avoid_kick': 0.02,
+    'panic_factor_near': 1.0,
+    'panic_factor_very_near': 1.0,
+    'use_disparity_extender': True,
+    'disparity_threshold': 0.35,
+    'vehicle_width': 0.225,
+    'safety_margin': 0.08,
+    'no_cutback_enabled': True,
+    'cutback_clearance': 0.9,
+    'cutback_hold_steps': 8,
+}
+
+
+class OppFTGNode(Node):
     def __init__(self):
-        super().__init__('reactive_node')
-        # Topics & Subs, Pubs
-        lidarscan_topic = '/opp_scan'
-        drive_topic = '/opp_drive'
+        super().__init__('opp_ftg_node')
 
-        self.scan_subscriber = self.create_subscription(
-            LaserScan, lidarscan_topic, self.lidar_callback, 10)
-        self.drive_publisher = self.create_publisher(
-            AckermannDriveStamped, drive_topic, 10)
+        self.declare_parameter(
+            'ftg_config',
+            '/home/aaron/f110_gymnasium_ros2_jazzy/from_training/ftg_max.yaml',
+        )
 
-    def preprocess_lidar(self, ranges):
-        proc_ranges = np.array(ranges)
-        proc_ranges[proc_ranges > 3.0] = 3.0
-        proc_ranges = np.convolve(proc_ranges, np.ones(5)/5, 'same')
-        return proc_ranges
+        # Load FTG config
+        cfg_path = self.get_parameter('ftg_config').get_parameter_value().string_value
+        params = dict(DEFAULT_FTG_PARAMS)
+        if cfg_path and os.path.isfile(cfg_path):
+            with open(cfg_path, 'r') as f:
+                loaded = yaml.safe_load(f)
+            # ftg_max.yaml has agents.car_1.params structure
+            if isinstance(loaded, dict):
+                agent_cfg = loaded
+                if 'agents' in agent_cfg:
+                    for aid, acfg in agent_cfg['agents'].items():
+                        if isinstance(acfg, dict) and 'params' in acfg:
+                            params.update(acfg['params'])
+                            break
+                elif 'params' in agent_cfg:
+                    params.update(agent_cfg['params'])
+                else:
+                    params.update(agent_cfg)
+            self.get_logger().info(f'Loaded FTG config from {cfg_path}')
+        else:
+            self.get_logger().warn(f'FTG config not found at {cfg_path}, using defaults')
 
-    def find_max_gap(self, free_space_ranges):
-        masked = np.ma.masked_equal(free_space_ranges, 0)
-        slices = np.ma.clump_unmasked(masked)
-        max_gap = max(slices, key=lambda s: s.stop - s.start)
-        return max_gap.start, max_gap.stop
+        self.ftg = FollowTheGapPolicy.from_config(params)
+        self.get_logger().info(
+            f'FTG policy: max_speed={self.ftg.max_speed}, '
+            f'steering_gain={self.ftg.steering_gain}, '
+            f'bubble_radius={self.ftg.bubble_radius}'
+        )
 
-    def find_best_point(self, start_i, end_i, ranges):
-        return np.argmax(ranges[start_i:end_i]) + start_i
+        # Current velocity from odom
+        self.current_velocity = np.zeros(2, dtype=np.float32)
 
-    def lidar_callback(self, data):
-        ranges = np.array(data.ranges)
-        proc_ranges = self.preprocess_lidar(ranges)
+        qos = QoSProfile(
+            depth=1,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+        )
 
-        # Find closest point to LiDAR
-        closest_point = proc_ranges.argmin()
+        self.scan_sub = self.create_subscription(
+            LaserScan, '/opp_scan', self.scan_callback, qos
+        )
+        self.odom_sub = self.create_subscription(
+            Odometry, 'odom', self.odom_callback, qos
+        )
+        self.drive_pub = self.create_publisher(
+            AckermannDriveStamped, '/opp_drive', 10
+        )
 
-        # Eliminate all points inside 'bubble' (set them to zero)
-        bubble_radius = 50
-        min_idx = max(closest_point - bubble_radius, 0)
-        max_idx = min(closest_point + bubble_radius, len(proc_ranges) - 1)
-        proc_ranges[min_idx:max_idx] = 0
+    def odom_callback(self, msg: Odometry):
+        self.current_velocity[0] = msg.twist.twist.linear.x
+        self.current_velocity[1] = msg.twist.twist.linear.y
 
-        # Find max length gap
-        gap_start, gap_end = self.find_max_gap(proc_ranges)
+    def scan_callback(self, msg: LaserScan):
+        ranges = np.asarray(msg.ranges, dtype=np.float32)
+        ranges = np.nan_to_num(ranges, nan=msg.range_max, posinf=msg.range_max, neginf=0.0)
+        ranges = np.clip(ranges, 0.0, msg.range_max)
 
-        # Find the best point in the gap
-        best_point = self.find_best_point(gap_start, gap_end, proc_ranges)
+        obs = {
+            'scans': ranges,
+            'velocity': self.current_velocity,
+        }
 
-        # Calculate steering angle based on best point
-        angle = (best_point - len(proc_ranges)/2) * data.angle_increment
+        action = self.ftg.get_action(None, obs)
+        steer = float(action[0])
+        speed = float(action[1])
 
-        # Publish Drive message
         drive_msg = AckermannDriveStamped()
-        drive_msg.drive.steering_angle = angle
-        drive_msg.drive.speed = 0.50
+        drive_msg.drive.steering_angle = steer
+        drive_msg.drive.speed = speed
+        self.drive_pub.publish(drive_msg)
 
-        self.drive_publisher.publish(drive_msg)
 
 def main(args=None):
     rclpy.init(args=args)
-    print("WallFollow Initialized")
-    reactive_node = ReactiveFollowGap()
-    rclpy.spin(reactive_node)
-
-    reactive_node.destroy_node()
+    node = OppFTGNode()
+    rclpy.spin(node)
+    node.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
