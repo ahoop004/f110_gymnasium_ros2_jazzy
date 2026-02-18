@@ -1,27 +1,33 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Shared observation/action helpers for gaplock ROS actors."""
+"""Shared observation/action helpers for gaplock ROS2 actors.
 
-#from __future__ import annotations
+Observation layout (119 dims) matches from_training/obs_flatten.py:
+  [0:108]   LiDAR beams, normalized to [0, 1] with max_range=12.0 m
+  [108:111] Ego velocity [vx, vy, omega], clipped to [-1, 1] / SPEED_SCALE=1.0
+  [111:114] Target velocity [vx, vy, omega], clipped to [-1, 1] / SPEED_SCALE=1.0
+  [114:119] Relative pose in ego-centric frame:
+              [rel_x, rel_y, sin(Δθ), cos(Δθ), distance], clipped to [-1, 1] / 12.0 m
+"""
 
 import math
 from typing import Any, Dict, Optional
 
 import numpy as np
-import rclpy
 
 LIDAR_BEAMS = 108
-MAX_LIDAR_RANGE = 30.0
-POSE_NORM = 30.0
-VEL_NORM = 2.0
-OBS_DIM = 126  # 108 lidar + 18 pose/velocity features
-ACTION_LOW = np.array([-0.41890001297, -1.0], dtype=np.float32)
-ACTION_HIGH = np.array([0.41890001297, 1.0], dtype=np.float32)
+MAX_LIDAR_RANGE = 12.0        # metres — matches gaplock_attacker.yaml lidar.max_range
+LIDAR_POSITION_SCALE = 12.0   # metres — position normalisation for relative pose
+SPEED_SCALE = 1.0             # m/s  — velocity normalisation
+OBS_DIM = 119                 # 108 + 3 + 3 + 5
+ACTION_LOW = np.array([-0.46, -1.0], dtype=np.float32)
+ACTION_HIGH = np.array([0.46, 1.0], dtype=np.float32)
 
 
 def init_agent_state() -> Dict[str, Any]:
-    return {"pose": None, "vel": np.zeros(2, dtype=np.float32), "stamp": None}
+    # vel is [vx, vy, omega]
+    return {"pose": None, "vel": np.zeros(3, dtype=np.float32), "stamp": None}
 
 
 def quat_to_yaw(q) -> float:
@@ -31,24 +37,31 @@ def quat_to_yaw(q) -> float:
 
 
 def update_agent_state(state: Dict[str, Any], msg) -> None:
+    """Update pose/velocity from a VICON TransformStamped message."""
     t = msg.transform.translation
     yaw = quat_to_yaw(msg.transform.rotation)
     pose = np.array([float(t.x), float(t.y), float(yaw)], dtype=np.float32)
-    if msg.header and msg.header.stamp:
-        stamp = msg.header.stamp
-    else:
-        stamp = rclpy.time.Time()
-    vx = vy = 0.0
-    if state["pose"] is not None and state["stamp"] is not None and stamp:
-        dt = 0.02# max(stamp.nanoseconds - state["stamp"].nanoseconds, 1e-6)*1e6
+
+    s = msg.header.stamp
+    stamp_sec = float(s.sec) + float(s.nanosec) * 1e-9
+
+    vx = vy = omega = 0.0
+    if state["pose"] is not None and state["stamp"] is not None:
+        dt = 0.02  # fixed 50 Hz dt; avoids noisy instantaneous dt
         vx = (pose[0] - state["pose"][0]) / dt
         vy = (pose[1] - state["pose"][1]) / dt
+        dyaw = (yaw - float(state["pose"][2]) + math.pi) % (2.0 * math.pi) - math.pi
+        omega = dyaw / dt
+
     state["pose"] = pose
-    state["vel"] = np.array([vx, vy], dtype=np.float32)
-    state["stamp"] = stamp
+    state["vel"] = np.array([vx, vy, omega], dtype=np.float32)
+    state["stamp"] = stamp_sec
 
 
-def downsample_lidar_to_108(ranges: Optional[np.ndarray], replace_inf: float = MAX_LIDAR_RANGE) -> np.ndarray:
+def downsample_lidar_to_108(
+    ranges: Optional[np.ndarray],
+    replace_inf: float = MAX_LIDAR_RANGE,
+) -> np.ndarray:
     if ranges is None:
         return np.full(LIDAR_BEAMS, replace_inf, dtype=np.float32)
     arr = np.asarray(ranges, dtype=np.float32)
@@ -62,41 +75,41 @@ def downsample_lidar_to_108(ranges: Optional[np.ndarray], replace_inf: float = M
     return arr[idx]
 
 
-def encode_pose(pose: np.ndarray) -> np.ndarray:
-    x = pose[0] / POSE_NORM
-    y = pose[1] / POSE_NORM
-    yaw = pose[2]
-    return np.array([x, y, math.sin(yaw), math.cos(yaw)], dtype=np.float32)
+def build_observation(
+    last_scan: np.ndarray,
+    primary_state: Dict[str, Any],
+    secondary_state: Dict[str, Any],
+) -> np.ndarray:
+    """Build a 119-dim observation vector matching the training flattener.
 
-
-def encode_velocity(vel: np.ndarray) -> np.ndarray:
-    vx = vel[0] / VEL_NORM
-    vy = vel[1] / VEL_NORM
-    speed = math.sqrt(vx * vx + vy * vy)
-    return np.array([vx, vy, speed], dtype=np.float32)
-
-
-def encode_relative(attacker_pose: np.ndarray, target_pose: np.ndarray) -> np.ndarray:
-    dx = target_pose[0] - attacker_pose[0]
-    dy = target_pose[1] - attacker_pose[1]
-    dtheta = target_pose[2] - attacker_pose[2]
-    return np.array([dx, dy, math.sin(dtheta), math.cos(dtheta)], dtype=np.float32)
-
-
-def build_observation(last_scan: np.ndarray, primary_state: Dict[str, Any], secondary_state: Dict[str, Any]) -> np.ndarray:
+    primary_state  = attacker (ego)
+    secondary_state = target (defender)
+    """
+    # --- LiDAR: 108 dims, [0, 1] ---
     lidar = downsample_lidar_to_108(last_scan)
-    lidar = np.clip(lidar / MAX_LIDAR_RANGE, 0.0, 1.0)
-    attacker_pose = encode_pose(primary_state["pose"])
-    attacker_vel = encode_velocity(primary_state["vel"])
-    target_pose = encode_pose(secondary_state["pose"])
-    target_vel = encode_velocity(secondary_state["vel"])
-    relative = encode_relative(primary_state["pose"], secondary_state["pose"])
-    obs = np.concatenate([lidar, attacker_pose, attacker_vel, target_pose, target_vel, relative], axis=0)
+    lidar_norm = np.clip(lidar / MAX_LIDAR_RANGE, 0.0, 1.0)
+
+    # --- Ego velocity: [vx, vy, omega], 3 dims, [-1, 1] ---
+    ego_vel = np.clip(primary_state["vel"] / SPEED_SCALE, -1.0, 1.0).astype(np.float32)
+
+    # --- Target velocity: [vx, vy, omega], 3 dims, [-1, 1] ---
+    target_vel = np.clip(secondary_state["vel"] / SPEED_SCALE, -1.0, 1.0).astype(np.float32)
+
+    # --- Relative pose in ego-centric frame: 5 dims ---
+    x, y, theta = map(float, primary_state["pose"])
+    tx, ty, ttheta = map(float, secondary_state["pose"])
+    dx = tx - x
+    dy = ty - y
+    cos_t = math.cos(theta)
+    sin_t = math.sin(theta)
+    rel_x = float(np.clip((cos_t * dx + sin_t * dy) / LIDAR_POSITION_SCALE, -1.0, 1.0))
+    rel_y = float(np.clip((-sin_t * dx + cos_t * dy) / LIDAR_POSITION_SCALE, -1.0, 1.0))
+    dtheta = (ttheta - theta + math.pi) % (2.0 * math.pi) - math.pi
+    sin_dth = math.sin(dtheta)
+    cos_dth = math.cos(dtheta)
+    distance = float(np.clip(math.sqrt(dx**2 + dy**2) / LIDAR_POSITION_SCALE, 0.0, 1.0))
+    relative = np.array([rel_x, rel_y, sin_dth, cos_dth, distance], dtype=np.float32)
+
+    obs = np.concatenate([lidar_norm, ego_vel, target_vel, relative], axis=0)
+    assert obs.shape[0] == OBS_DIM, f"obs dim {obs.shape[0]} != {OBS_DIM}"
     return obs.astype(np.float32, copy=False)
-
-
-def scale_continuous_action(raw_action: np.ndarray) -> np.ndarray:
-    clipped = np.clip(raw_action, -1.0, 1.0)
-    range_half = (ACTION_HIGH - ACTION_LOW) / 2.0
-    mid = (ACTION_HIGH + ACTION_LOW) / 2.0
-    return clipped * range_half + mid
