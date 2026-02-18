@@ -20,6 +20,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import os
+import yaml
+import time
+
 import rclpy
 from rclpy.node import Node
 
@@ -55,6 +59,8 @@ class GymBridge(Node):
         self.declare_parameter('scan_distance_to_base_link', Parameter.Type.DOUBLE)
         self.declare_parameter('scan_fov', Parameter.Type.DOUBLE)
         self.declare_parameter('scan_beams', Parameter.Type.INTEGER)
+        self.declare_parameter('scan_max_range', 30.0)
+        self.declare_parameter('sim_timestep', 0.01)
         self.declare_parameter('map_path', '')
         self.declare_parameter('map_img_ext', '')
         self.declare_parameter('num_agent', Parameter.Type.INTEGER)
@@ -65,6 +71,28 @@ class GymBridge(Node):
         self.declare_parameter('sy1', Parameter.Type.DOUBLE)
         self.declare_parameter('stheta1', Parameter.Type.DOUBLE)
         self.declare_parameter('kb_teleop', Parameter.Type.BOOL)
+        self.declare_parameter('auto_reset', True)
+        self.declare_parameter('reset_delay', 1.0)
+
+        # vehicle parameters (F1Tenth defaults)
+        self.declare_parameter('veh_mu', 1.0489)
+        self.declare_parameter('veh_C_Sf', 4.718)
+        self.declare_parameter('veh_C_Sr', 5.4562)
+        self.declare_parameter('veh_lf', 0.15875)
+        self.declare_parameter('veh_lr', 0.17145)
+        self.declare_parameter('veh_h', 0.074)
+        self.declare_parameter('veh_m', 3.74)
+        self.declare_parameter('veh_I', 0.04712)
+        self.declare_parameter('veh_s_min', -0.4189)
+        self.declare_parameter('veh_s_max', 0.4189)
+        self.declare_parameter('veh_sv_min', -3.2)
+        self.declare_parameter('veh_sv_max', 3.2)
+        self.declare_parameter('veh_v_switch', 7.319)
+        self.declare_parameter('veh_a_max', 9.51)
+        self.declare_parameter('veh_v_min', -5.0)
+        self.declare_parameter('veh_v_max', 20.0)
+        self.declare_parameter('veh_width', 0.31)
+        self.declare_parameter('veh_length', 0.58)
 
         # check num_agents
         num_agents = self.get_parameter('num_agent').value
@@ -73,11 +101,44 @@ class GymBridge(Node):
         elif type(num_agents) != int:
             raise ValueError('num_agents should be an int.')
 
+        # read sensor and sim params
+        scan_fov = self.get_parameter('scan_fov').value
+        scan_beams = self.get_parameter('scan_beams').value
+        self.scan_max_range = self.get_parameter('scan_max_range').value
+        sim_timestep = self.get_parameter('sim_timestep').value
+
+        # build vehicle params dict
+        params = {
+            'mu': self.get_parameter('veh_mu').value,
+            'C_Sf': self.get_parameter('veh_C_Sf').value,
+            'C_Sr': self.get_parameter('veh_C_Sr').value,
+            'lf': self.get_parameter('veh_lf').value,
+            'lr': self.get_parameter('veh_lr').value,
+            'h': self.get_parameter('veh_h').value,
+            'm': self.get_parameter('veh_m').value,
+            'I': self.get_parameter('veh_I').value,
+            's_min': self.get_parameter('veh_s_min').value,
+            's_max': self.get_parameter('veh_s_max').value,
+            'sv_min': self.get_parameter('veh_sv_min').value,
+            'sv_max': self.get_parameter('veh_sv_max').value,
+            'v_switch': self.get_parameter('veh_v_switch').value,
+            'a_max': self.get_parameter('veh_a_max').value,
+            'v_min': self.get_parameter('veh_v_min').value,
+            'v_max': self.get_parameter('veh_v_max').value,
+            'width': self.get_parameter('veh_width').value,
+            'length': self.get_parameter('veh_length').value,
+        }
+
         # env backend
         self.env = gym.make('f110_gym:f110-v0',
                             map=self.get_parameter('map_path').value,
                             map_ext=self.get_parameter('map_img_ext').value,
-                            num_agents=num_agents)
+                            num_agents=num_agents,
+                            params=params,
+                            scan_fov=scan_fov,
+                            scan_beams=scan_beams,
+                            scan_max_range=self.scan_max_range,
+                            timestep=sim_timestep)
 
         sx = self.get_parameter('sx').value
         sy = self.get_parameter('sy').value
@@ -89,8 +150,6 @@ class GymBridge(Node):
         self.ego_collision = False
         ego_scan_topic = self.get_parameter('ego_scan_topic').value
         ego_drive_topic = self.get_parameter('ego_drive_topic').value
-        scan_fov = self.get_parameter('scan_fov').value
-        scan_beams = self.get_parameter('scan_beams').value
         self.angle_min = -scan_fov / 2.
         self.angle_max = scan_fov / 2.
         self.angle_inc = scan_fov / scan_beams
@@ -124,8 +183,21 @@ class GymBridge(Node):
             self.obs, _ = self.env.reset(options=np.array([[sx, sy, stheta]]))
             self.ego_scan = list(self.obs['scans'][0])
 
+        # auto-reset on collision
+        self.auto_reset = self.get_parameter('auto_reset').value
+        self.reset_delay = self.get_parameter('reset_delay').value
+        self.collision_time = None  # timestamp when collision first detected
+
+        # load spawn points from map YAML
+        self.spawn_pairs = self._load_spawn_pairs(
+            self.get_parameter('map_path').value,
+            [sx, sy, stheta],
+            [sx1, sy1, stheta1] if self.has_opp else None,
+        )
+        self.spawn_index = 0
+
         # sim physical step timer
-        self.drive_timer = self.create_timer(0.01, self.drive_timer_callback)
+        self.drive_timer = self.create_timer(sim_timestep, self.drive_timer_callback)
         # topic publishing timer
         self.timer = self.create_timer(0.004, self.timer_callback)
 
@@ -227,6 +299,7 @@ class GymBridge(Node):
         elif self.ego_drive_published and self.has_opp and self.opp_drive_published:
             self.obs, self.reward, self.terminated, self.truncated, _ = self.env.step(np.array([[self.ego_steer, self.ego_requested_speed], [self.opp_steer, self.opp_requested_speed]]))
         self._update_sim_state()
+        self._check_auto_reset()
 
     def timer_callback(self):
         ts = self.get_clock().now().to_msg()
@@ -239,7 +312,7 @@ class GymBridge(Node):
         scan.angle_max = self.angle_max
         scan.angle_increment = self.angle_inc
         scan.range_min = 0.
-        scan.range_max = 30.
+        scan.range_max = self.scan_max_range
         scan.ranges = self.ego_scan
         self.ego_scan_pub.publish(scan)
 
@@ -251,7 +324,7 @@ class GymBridge(Node):
             opp_scan.angle_max = self.angle_max
             opp_scan.angle_increment = self.angle_inc
             opp_scan.range_min = 0.
-            opp_scan.range_max = 30.
+            opp_scan.range_max = self.scan_max_range
             opp_scan.ranges = self.opp_scan
             self.opp_scan_pub.publish(opp_scan)
 
@@ -265,21 +338,105 @@ class GymBridge(Node):
         self.ego_scan = list(self.obs['scans'][0])
         if self.has_opp:
             self.opp_scan = list(self.obs['scans'][1])
-            self.opp_pose[0] = self.obs['poses_x'][1]
-            self.opp_pose[1] = self.obs['poses_y'][1]
-            self.opp_pose[2] = self.obs['poses_theta'][1]
-            self.opp_speed[0] = self.obs['linear_vels_x'][1]
-            self.opp_speed[1] = self.obs['linear_vels_y'][1]
-            self.opp_speed[2] = self.obs['ang_vels_z'][1]
+            self.opp_pose[0] = float(self.obs['poses_x'][1])
+            self.opp_pose[1] = float(self.obs['poses_y'][1])
+            self.opp_pose[2] = float(self.obs['poses_theta'][1])
+            self.opp_speed[0] = float(self.obs['linear_vels_x'][1])
+            self.opp_speed[1] = float(self.obs['linear_vels_y'][1])
+            self.opp_speed[2] = float(self.obs['ang_vels_z'][1])
 
-        self.ego_pose[0] = self.obs['poses_x'][0]
-        self.ego_pose[1] = self.obs['poses_y'][0]
-        self.ego_pose[2] = self.obs['poses_theta'][0]
-        self.ego_speed[0] = self.obs['linear_vels_x'][0]
-        self.ego_speed[1] = self.obs['linear_vels_y'][0]
-        self.ego_speed[2] = self.obs['ang_vels_z'][0]
+        self.ego_pose[0] = float(self.obs['poses_x'][0])
+        self.ego_pose[1] = float(self.obs['poses_y'][0])
+        self.ego_pose[2] = float(self.obs['poses_theta'][0])
+        self.ego_speed[0] = float(self.obs['linear_vels_x'][0])
+        self.ego_speed[1] = float(self.obs['linear_vels_y'][0])
+        self.ego_speed[2] = float(self.obs['ang_vels_z'][0])
 
         
+
+    def _load_spawn_pairs(self, map_path, ego_default, opp_default):
+        """Load spawn point pairs from the map YAML file.
+
+        Generates pairs by cycling spawn points: (spawn_1, spawn_2),
+        (spawn_2, spawn_3), ..., (spawn_N, spawn_1). The ego and opp
+        positions alternate each pair so both start from varied locations.
+        Falls back to the sim.yaml defaults if no spawn points found.
+        """
+        yaml_path = map_path + '.yaml'
+        spawn_points = []
+        if os.path.exists(yaml_path):
+            with open(yaml_path, 'r') as f:
+                map_yaml = yaml.safe_load(f)
+            annotations = map_yaml.get('annotations', {})
+            sp_list = annotations.get('spawn_points', [])
+            for sp in sp_list:
+                pose = sp.get('pose', [])
+                if len(pose) >= 3:
+                    spawn_points.append([float(pose[0]), float(pose[1]), float(pose[2])])
+
+        if not self.has_opp or len(spawn_points) < 2:
+            # Not enough spawn points or single agent — use defaults
+            if opp_default is not None:
+                return [[ego_default, opp_default]]
+            return [[ego_default]]
+
+        # Build pairs: each pair uses two different spawn points
+        pairs = []
+        n = len(spawn_points)
+        for i in range(n):
+            j = (i + 1) % n
+            # Alternate which agent gets which spawn
+            pairs.append([spawn_points[i], spawn_points[j]])
+            pairs.append([spawn_points[j], spawn_points[i]])
+        self.get_logger().info(f'Loaded {n} spawn points → {len(pairs)} spawn pairs')
+        return pairs
+
+    def _check_auto_reset(self):
+        """Check for collisions and auto-reset after delay.
+
+        Collision flags from the env are transient (iTTC clears once velocity
+        is zero, GJK clears once vehicles separate). We latch any detection
+        so the reset delay works reliably.
+        """
+        if not self.auto_reset:
+            return
+
+        collisions = self.obs.get('collisions', None)
+        if collisions is None:
+            return
+
+        any_collision = any(float(c) > 0.0 for c in collisions)
+
+        if any_collision and self.collision_time is None:
+            self.collision_time = time.monotonic()
+            which = [i for i, c in enumerate(collisions) if float(c) > 0.0]
+            self.get_logger().info(f'Collision detected (agents {which}), resetting in {self.reset_delay}s...')
+
+        if self.collision_time is not None:
+            if time.monotonic() - self.collision_time >= self.reset_delay:
+                self._do_spawn_reset()
+                self.collision_time = None
+
+    def _do_spawn_reset(self):
+        """Reset environment with the next spawn pair."""
+        self.spawn_index = (self.spawn_index + 1) % len(self.spawn_pairs)
+        pair = self.spawn_pairs[self.spawn_index]
+
+        if self.has_opp:
+            ego_spawn, opp_spawn = pair
+            self.get_logger().info(
+                f'Auto-reset #{self.spawn_index}: '
+                f'ego=({ego_spawn[0]:.2f}, {ego_spawn[1]:.2f}), '
+                f'opp=({opp_spawn[0]:.2f}, {opp_spawn[1]:.2f})'
+            )
+            self.obs, _ = self.env.reset(options=np.array([ego_spawn, opp_spawn]))
+            self.opp_scan = list(self.obs['scans'][1])
+        else:
+            self.get_logger().info(f'Auto-reset #{self.spawn_index}')
+            self.obs, _ = self.env.reset(options=np.array([pair[0]]))
+
+        self.ego_scan = list(self.obs['scans'][0])
+        self._update_sim_state()
 
     def _publish_odom(self, ts):
         ego_odom = Odometry()

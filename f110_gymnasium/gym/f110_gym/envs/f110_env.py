@@ -181,6 +181,11 @@ class F110Env(gym.Env):
         except:
             self.lidar_dist = 0.0
 
+        # sensor parameters
+        self.scan_fov = kwargs.get('scan_fov', 4.7)
+        self.scan_beams = kwargs.get('scan_beams', 1080)
+        self.scan_max_range = kwargs.get('scan_max_range', 30.0)
+
         # radius to consider done
         self.start_thresh = 0.5  # 10cm
 
@@ -214,14 +219,16 @@ class F110Env(gym.Env):
         self.start_rot = np.eye(2)
 
         # initiate stuff
-        self.sim = Simulator(self.params, self.num_agents, self.seed, time_step=self.timestep, integrator=self.integrator, lidar_dist=self.lidar_dist)
+        self.sim = Simulator(self.params, self.num_agents, self.seed, time_step=self.timestep, integrator=self.integrator, lidar_dist=self.lidar_dist, num_beams=self.scan_beams, fov=self.scan_fov, max_range=self.scan_max_range)
         self.sim.set_map(self.map_path, self.map_ext)
         
-        meta = yaml.safe_load(open('/home/aaron/f110_gymnasium_ros2_jazzy/assets/maps/levine.yaml'))
+        with open(self.map_path) as _f:
+            meta = yaml.safe_load(_f)
         R = meta['resolution']
         x0, y0, _ = meta.get('origin', (0.0, 0.0, 0.0))
-        img = Image.open('/home/aaron/f110_gymnasium_ros2_jazzy/assets/maps/' + meta['image'])
-        width, height = img.size
+        map_dir = os.path.dirname(self.map_path)
+        with Image.open(os.path.join(map_dir, meta['image'])) as _img:
+            width, height = _img.size
         x_min = x0
         x_max = x0 + width * R
         y_min = y0
@@ -237,7 +244,7 @@ class F110Env(gym.Env):
         self.action_space = spaces.Tuple((single_action_space, single_action_space))
         
         
-        scan_space = spaces.Box(low=0.0, high=30.0, shape=(1080,), dtype=np.float32)
+        scan_space = spaces.Box(low=0.0, high=self.scan_max_range, shape=(self.scan_beams,), dtype=np.float32)
         pose_space = spaces.Box(
             low=np.array([x_min, y_min, -np.pi], dtype=np.float32),
             high=np.array([x_max, y_max, np.pi], dtype=np.float32),
@@ -251,14 +258,14 @@ class F110Env(gym.Env):
         
         spaces_dict_obs = spaces.Dict({
             'ego_idx': spaces.Discrete(self.num_agents),
-            'scans': spaces.Box(low=0.0, high=30.0, shape=(self.num_agents, 1080), dtype=np.float32),
+            'scans': spaces.Box(low=0.0, high=self.scan_max_range, shape=(self.num_agents, self.scan_beams), dtype=np.float32),
             'poses_x': spaces.Box(low=x_min, high=x_max, shape=(self.num_agents,), dtype=np.float32),
             'poses_y': spaces.Box(low=y_min, high=y_max, shape=(self.num_agents,), dtype=np.float32),
             'poses_theta': spaces.Box(low=-np.pi, high=np.pi, shape=(self.num_agents,), dtype=np.float32),
             'linear_vels_x': spaces.Box(low=self.params['v_min'], high=self.params['v_max'], shape=(self.num_agents,), dtype=np.float32),
             'linear_vels_y': spaces.Box(low=self.params['v_min'], high=self.params['v_max'], shape=(self.num_agents,), dtype=np.float32),
-            'ang_vels_z': spaces.Box(low=0.0, high=10.0, shape=(self.num_agents,), dtype=np.float32),
-            'collisions': spaces.MultiBinary(self.num_agents),  # 0/1 collision flags
+            'ang_vels_z': spaces.Box(low=-10.0, high=10.0, shape=(self.num_agents,), dtype=np.float32),
+            'collisions': spaces.Box(low=0.0, high=1.0, shape=(self.num_agents,), dtype=np.float32),
             'lap_times': spaces.Box(low=0.0, high=100000.0, shape=(self.num_agents,), dtype=np.float32),
             'lap_counts': spaces.Box(low=0, high=10, shape=(self.num_agents,), dtype=np.float32),
         })
@@ -350,9 +357,18 @@ class F110Env(gym.Env):
         
         # call simulation step
         obs = self.sim.step(action)
-        
-        obs['lap_times'] = self.lap_times
-        obs['lap_counts'] = self.lap_counts
+
+        # cast list observations to float32 numpy arrays to match observation space
+        for key in ('scans', 'poses_x', 'poses_y', 'poses_theta',
+                     'linear_vels_x', 'linear_vels_y', 'ang_vels_z', 'collisions'):
+            if key in obs:
+                obs[key] = np.array(obs[key], dtype=np.float32)
+        # clip scan noise that exceeds max_range
+        if 'scans' in obs:
+            np.clip(obs['scans'], 0.0, self.scan_max_range, out=obs['scans'])
+
+        obs['lap_times'] = self.lap_times.astype(np.float32)
+        obs['lap_counts'] = self.lap_counts.astype(np.float32)
 
         F110Env.current_obs = obs
 
@@ -486,8 +502,8 @@ class F110Env(gym.Env):
         if F110Env.renderer is None:
             # first call, initialize everything
             from f110_gym.envs.rendering import EnvRenderer
-            fov = 4.7
-            max_range=30.0
+            fov = self.scan_fov
+            max_range = self.scan_max_range
             F110Env.renderer = EnvRenderer(WINDOW_W,
                                            WINDOW_H,
                                            

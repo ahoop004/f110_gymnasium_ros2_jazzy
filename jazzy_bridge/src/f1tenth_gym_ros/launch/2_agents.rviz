@@ -274,8 +274,8 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Class: rviz_default_plugins/Orbit
-      Distance: 10
+      Class: rviz_default_plugins/ThirdPersonFollower
+      Distance: 8
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -291,8 +291,8 @@ Visualization Manager:
       Name: Current View
       Near Clip Distance: 0.009999999776482582
       Pitch: 0.5353981852531433
-      Target Frame: <Fixed Frame>
-      Value: Orbit (rviz)
+      Target Frame: ego_racecar/base_link
+      Value: ThirdPersonFollower (rviz)
       Yaw: 3.1453983783721924
     Saved: ~
 Window Geometry:

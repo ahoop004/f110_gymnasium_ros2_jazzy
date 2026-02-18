@@ -37,10 +37,33 @@ bridge:
     # transform related
     scan_distance_to_base_link: 0.0
     
-    # laserscan parameters
-    scan_fov: 4.7
-    # scan_fov: 6.2
-    scan_beams: 1080
+    # sensor parameters
+    scan_fov: 4.7              # field of view (rad), ~270 deg
+    scan_beams: 1080           # number of lidar beams
+    scan_max_range: 30.0       # max lidar range (m)
+
+    # simulation parameters
+    sim_timestep: 0.01         # physics timestep (s)
+
+    # vehicle parameters (F1Tenth defaults)
+    veh_mu: 1.0489             # surface friction coefficient
+    veh_C_Sf: 4.718            # cornering stiffness, front
+    veh_C_Sr: 5.4562           # cornering stiffness, rear
+    veh_lf: 0.15875            # center of gravity to front axle (m)
+    veh_lr: 0.17145            # center of gravity to rear axle (m)
+    veh_h: 0.074               # center of gravity height (m)
+    veh_m: 3.74                # mass (kg)
+    veh_I: 0.04712             # moment of inertia (kg*m^2)
+    veh_s_min: -0.4189         # min steering angle (rad)
+    veh_s_max: 0.4189          # max steering angle (rad)
+    veh_sv_min: -3.2           # min steering velocity (rad/s)
+    veh_sv_max: 3.2            # max steering velocity (rad/s)
+    veh_v_switch: 7.319        # switching velocity (m/s)
+    veh_a_max: 9.51            # max acceleration (m/s^2)
+    veh_v_min: -5.0            # min velocity (m/s)
+    veh_v_max: 20.0            # max velocity (m/s)
+    veh_width: 0.31            # vehicle width (m)
+    veh_length: 0.58           # vehicle length (m)
 
     # map parameters
     map_path: '/home/aaron/f110_gymnasium_ros2_jazzy/assets/maps/line2'
@@ -50,13 +73,18 @@ bridge:
     # opponent parameters
     num_agent: 2
 
+    # auto-reset on collision
+    auto_reset: True               # reset env when any agent collides
+    reset_delay: 1.0               # seconds to wait before resetting
+
     # controller selection: 'gap_follow', 'rl', 'ppo'
     ego_controller: 'ppo'
     opp_controller: 'gap_follow'
 
     # ego (attacker, car_0) starting pose - spawn_2 from line2.yaml
     sx: -46.769
-    sy: 0.0768
+    sy: -1.0768
+    # sy: 0.0768
     stheta: 0.0
 
     # opp (target, car_1) starting pose - spawn_1 from line2.yaml

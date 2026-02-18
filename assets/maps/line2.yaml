@@ -31,7 +31,8 @@ annotations:
   - name: spawn_2
     pose:
     - -46.769
-    - 0.0768
+    # - 0.0768
+    - -1.0768
     - 0.0
   - name: spawn_3
     pose:
