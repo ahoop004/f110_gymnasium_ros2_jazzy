@@ -89,6 +89,8 @@ class RLActorNode(Node):
         self.declare_parameter("prevent_reverse_min_speed", 0.01)
         self.declare_parameter("max_pose_age", 0.25)
         self.declare_parameter("throttle_scale", 0.5)  # multiply policy throttle by this
+        self.declare_parameter("min_safe_distance", 0.35)  # metres — forward arc stop
+        self.declare_parameter("safety_arc_deg", 45.0)     # ± degrees from front
 
         script_dir = os.path.dirname(os.path.realpath(__file__))
         default_ckpt = os.path.join(script_dir, "ppo_policy.pt")
@@ -105,10 +107,13 @@ class RLActorNode(Node):
         self.min_throttle = float(self.get_parameter("prevent_reverse_min_speed").value)
         self.max_pose_age = float(self.get_parameter("max_pose_age").value)
         self.throttle_scale = float(self.get_parameter("throttle_scale").value)
+        self.min_safe_dist  = float(self.get_parameter("min_safe_distance").value)
+        self.safety_arc_rad = np.deg2rad(float(self.get_parameter("safety_arc_deg").value))
         self.ckpt_path: str = self.get_parameter("ckpt").value
 
         # ── State ─────────────────────────────────────────────────────────────
         self.last_scan: Optional[np.ndarray] = None
+        self._last_scan_msg = None
         self.primary_state = init_agent_state()    # attacker (ego)
         self.secondary_state = init_agent_state()  # target (defender)
         self._tick_count = 0
@@ -134,6 +139,29 @@ class RLActorNode(Node):
         # ── Timer ─────────────────────────────────────────────────────────────
         self.create_timer(1.0 / self.rate_hz, self.on_tick)
 
+    # ── Safety ────────────────────────────────────────────────────────────────
+
+    def _forward_clear(self):
+        """Return True if the forward arc has no obstacle closer than min_safe_dist."""
+        if self.last_scan is None or len(self.last_scan) == 0:
+            return True
+        # Reconstruct angle array from the last stored LaserScan metadata
+        msg = self._last_scan_msg
+        if msg is None:
+            return True
+        n = len(msg.ranges)
+        idx_lo = int((-self.safety_arc_rad - msg.angle_min) / msg.angle_increment)
+        idx_hi = int(( self.safety_arc_rad - msg.angle_min) / msg.angle_increment)
+        idx_lo = max(0, min(idx_lo, n - 1))
+        idx_hi = max(0, min(idx_hi, n - 1))
+        if idx_lo > idx_hi:
+            idx_lo, idx_hi = idx_hi, idx_lo
+        forward = np.array(msg.ranges[idx_lo: idx_hi + 1], dtype=np.float32)
+        valid = forward[np.isfinite(forward) & (forward > 0.0)]
+        if len(valid) == 0:
+            return True
+        return float(np.min(valid)) >= self.min_safe_dist
+
     # ── Callbacks ─────────────────────────────────────────────────────────────
 
     _TRAIN_FOV_RAD = np.deg2rad(270.0)
@@ -150,6 +178,7 @@ class RLActorNode(Node):
             start = (n - beams_to_keep) // 2
             ranges = ranges[start: start + beams_to_keep]
         self.last_scan = ranges
+        self._last_scan_msg = msg  # keep full message for angle metadata
 
     def on_primary(self, msg):
         update_agent_state(self.primary_state, msg)
@@ -193,16 +222,14 @@ class RLActorNode(Node):
                 self.pub_cmd.publish(Twist())
                 return
 
-        # ── Guard: safety border ───────────────────────────────────────────
-        if self.use_safety:
-            sec_y = float(self.secondary_state["pose"][1])
-            if abs(sec_y) > self.hard_border:
-                self.get_logger().warn(
-                    "Target |y|=%.2f > %.2f -> stopping" % (sec_y, self.hard_border),
-                    throttle_duration_sec=2.0,
-                )
-                self.pub_cmd.publish(Twist())
-                return
+        # ── Guard: forward collision ───────────────────────────────────────
+        if not self._forward_clear():
+            self.get_logger().warn(
+                "Obstacle within %.2fm — stopping" % self.min_safe_dist,
+                throttle_duration_sec=1.0,
+            )
+            self.pub_cmd.publish(Twist())
+            return
 
         # ── Inference ──────────────────────────────────────────────────────
         obs_vec = build_observation(self.last_scan, self.primary_state, self.secondary_state)
